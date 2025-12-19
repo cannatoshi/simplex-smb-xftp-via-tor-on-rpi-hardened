@@ -358,7 +358,7 @@ socks_proxy: 127.0.0.1:9050
 ```ini
 [WEB]
 static_path: /var/opt/simplex/www
-# https: on
+# https: 442
 # cert: /etc/opt/simplex/web.crt
 # key: /etc/opt/simplex/web.key
 ```
@@ -1319,7 +1319,7 @@ This project is actively developed. The following features are planned:
 
 ## License
 
-This guide is released under **CC BY-SA 4.0**.
+This guide is released under **MIT**.
 
 SimpleX software is licensed under **AGPL-3.0**.
 
