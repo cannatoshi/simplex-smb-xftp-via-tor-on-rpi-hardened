@@ -1,26 +1,114 @@
-# SimpleX on Raspberry Pi OS Lite (Tor-Only) — SMP + XFTP over Onion v3 (hardened version)
+# SimpleX Private Infrastructure on Raspberry Pi
+## Tor-Only SMP + XFTP Server with Multi-Instance Private Routing
 
-A battle-tested, reproducible guide to run your own private SimpleX infrastructure on a Raspberry Pi (ARM64) using Tor v3 hidden services & tools.
+A battle-tested, reproducible guide to deploy your own **high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
 
-> **Version:** 0.4 (19. December 2025)  
-> **Tested on:** Raspberry Pi 4, Raspberry Pi OS Lite 64-bit (Bookworm)
+> **Version:** 0.6 (19. December 2025)  
+> **Tested on:** Raspberry Pi 4 (4GB), Raspberry Pi OS Lite 64-bit (Bookworm)  
+> **SimpleX Version:** 6.4.5.1
 
 ---
 
-## What you will get
+## About This Project
 
-After completing this guide:
+This guide provides a **complete, self-hosted messaging infrastructure** designed for individuals and organizations requiring maximum privacy and metadata protection. Unlike traditional messaging solutions, this setup ensures:
 
-- **SMP server** reachable at: `smp://<fingerprint>:<password>@<SMP_ONION>:5223`
-- **XFTP server** reachable at: `xftp://<fingerprint>@<XFTP_ONION>:443`
+- **Zero clearnet exposure** – All traffic routes exclusively through Tor v3 onion services
+- **No user identifiers** – SimpleX uses no phone numbers, emails, or usernames
+- **Full infrastructure control** – You own and operate every component
+- **Private Message Routing** – Multi-hop routing prevents any single server from seeing sender AND recipient
+- **Metadata resistance** – Traffic mixing across multiple servers defeats correlation analysis
 
-> **Threat model:** Nothing reachable from clearnet. All traffic via Tor v3 onion services.  
-> **Admin access:** SSH via LAN only (or optionally via Tor later).
+### Who Is This For?
+
+| Use Case | Why SimpleX + Tor? |
+|----------|-------------------|
+| **Journalists & Media** | Protect sources, secure editorial communications, defeat surveillance |
+| **Whistleblowers** | Anonymous tip submission, secure document transfer |
+| **Activists & NGOs** | Organize without exposing social graphs to adversaries |
+| **Legal & Medical** | Client/patient confidentiality, privileged communications |
+| **Families & Friends** | Private group communication without Big Tech surveillance |
+| **Government & Authorities** | Secure internal communications, classified discussions |
+| **Research & Academia** | Protect research subjects, secure collaboration |
+| **Businesses** | Trade secrets, M&A discussions, competitive intelligence protection |
+
+### Why Raspberry Pi?
+
+This guide uses a Raspberry Pi as a **low-budget, high-security** reference platform:
+
+| Advantage | Description |
+|-----------|-------------|
+| **Cost** | ~€50-80 total hardware investment |
+| **Power** | 5-15W consumption, runs 24/7 for pennies |
+| **Stealth** | Small form factor, easy to conceal or relocate |
+| **Air-Gap Ready** | Can operate completely isolated from main networks |
+| **Reproducible** | Identical setup across multiple locations |
+| **Disposable** | SD card can be destroyed; device is replaceable |
+
+> **Note:** This architecture scales to VPS, dedicated servers, or Kubernetes clusters. The Raspberry Pi version proves the concept at minimal cost before larger deployments.
+
+### What You Will Build
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    YOUR RASPBERRY PI                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │              10 × SMP SERVERS                       │   │
+│   │         (Private Message Routing Pool)              │   │
+│   │                                                     │   │
+│   │   Each server = unique .onion address               │   │
+│   │   Traffic distributed across all instances          │   │
+│   │   No single point of metadata correlation           │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │              1 × XFTP SERVER                        │   │
+│   │         (Encrypted File Transfer)                   │   │
+│   │                                                     │   │
+│   │   20GB storage, files auto-expire                   │   │
+│   │   Chunked, encrypted uploads/downloads              │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                                                             │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │              TOR DAEMON                             │   │
+│   │         (11 Hidden Services)                        │   │
+│   │                                                     │   │
+│   │   All services Tor-only, zero clearnet             │   │
+│   │   v3 onion addresses (ed25519 crypto)              │   │
+│   └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   TOR NETWORK   │
+                    └─────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │ SimpleX Clients │
+                    │  (iOS/Android/  │
+                    │   Desktop)      │
+                    └─────────────────┘
+```
+
+### Security Model
+
+| Layer | Protection |
+|-------|------------|
+| **Transport** | Tor v3 hidden services (ed25519, no exit nodes) |
+| **Application** | SimpleX double-ratchet E2EE + post-quantum resistance |
+| **Metadata** | Private routing, traffic mixing, no user IDs |
+| **Infrastructure** | Self-hosted, no third-party dependencies |
+| **Network** | Firewall blocks all clearnet access to services |
 
 ---
 
 ## Table of Contents
 
+### Core Setup (Required)
 1. [Base setup](#1-base-setup)
 2. [Install dependencies](#2-install-dependencies)
 3. [Create SimpleX service user](#3-create-simplex-service-user)
@@ -34,6 +122,15 @@ After completing this guide:
 11. [Verify everything](#11-verify-everything)
 12. [Client setup](#12-client-setup)
 13. [Troubleshooting](#13-troubleshooting)
+
+### Optional Hardening (Recommended for High-Security)
+- [Appendix A: Multi-SMP for Private Message Routing](#appendix-a-multi-smp-for-private-message-routing)
+- [Appendix B: SSH over Tor](#appendix-b-ssh-over-tor) *(coming soon)*
+- [Appendix C: Tor v3 Client Authorization](#appendix-c-tor-v3-client-authorization) *(coming soon)*
+- [Appendix D: Vanguards](#appendix-d-vanguards) *(coming soon)*
+
+### Roadmap
+- [Future Development](#roadmap-future-development)
 
 ---
 
@@ -249,7 +346,10 @@ sudo nano /etc/opt/simplex/smp-server.ini
 [TRANSPORT]
 host: <your-smp-onion>.onion
 port: 5223
+socks_proxy: 127.0.0.1:9050
 ```
+
+> **CRITICAL:** The `socks_proxy` setting is required for Private Message Routing. Without it, servers cannot forward messages to other .onion servers.
 
 > **Use only ONE port (5223).** Multiple ports like `5223,443` cause client link format issues.
 
@@ -271,6 +371,10 @@ sudo sed -i 's/^https:.*/# &/' /etc/opt/simplex/smp-server.ini
 sudo sed -i 's/^cert:/# cert:/' /etc/opt/simplex/smp-server.ini
 sudo sed -i 's/^key:/# key:/' /etc/opt/simplex/smp-server.ini
 sudo sed -i 's/^port: .*/port: 5223/' /etc/opt/simplex/smp-server.ini
+
+# Enable SOCKS proxy for Tor (CRITICAL for Private Routing)
+grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
+  sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
 ```
 
 > **Note:** The config may have `https: on` or `https: 443` depending on version. The sed command above handles both.
@@ -286,7 +390,7 @@ sudo chmod 600 /etc/opt/simplex/server.key
 sudo chown simplex:simplex /etc/opt/simplex/server.key
 
 # Verify
-ls -la /etc/opt/simplex/
+sudo ls -la /etc/opt/simplex/
 ```
 
 All files should show `simplex simplex`.
@@ -605,7 +709,30 @@ sudo chown -R simplex:simplex /var/opt/simplex-xftp
 
 ---
 
-## Appendix: Quick reference commands
+### Private Routing Error: `does not exist (Name or service not known)`
+
+**Cause:** SMP servers cannot resolve .onion addresses for forwarding because SOCKS proxy is not configured.
+
+**Symptom in logs:**
+```
+Error connecting: xxx.onion PCENetworkError (NEConnectError {connectError = "...does not exist (Name or service not known)"})
+```
+
+**Fix:** Enable SOCKS proxy for all SMP servers:
+```bash
+# Add to [TRANSPORT] section in smp-server.ini
+socks_proxy: 127.0.0.1:9050
+
+# Or use sed:
+grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
+  sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
+
+sudo systemctl restart smp-server
+```
+
+---
+
+## Quick reference commands
 
 ```bash
 # Restart everything
@@ -625,9 +752,552 @@ echo "XFTP: $(sudo cat /var/lib/tor/simplex-xftp/hostname)"
 
 ---
 
+# Optional Hardening
+
+The following appendices provide advanced security configurations for high-threat environments such as journalist networks, activist groups, or anyone requiring maximum metadata protection.
+
+---
+
+# Appendix A: Multi-SMP for Private Message Routing
+
+> **Prerequisite:** Complete Sections 1-13 first.  
+> **Difficulty:** Intermediate  
+> **Time:** 30-45 minutes  
+> **Result:** 10 SMP servers on a single Raspberry Pi with full Private Routing support
+
+---
+
+## A.1 What is Private Message Routing?
+
+SimpleX Chat introduced **Private Message Routing** in v5.8 (enabled by default since v6.0) to protect sender IP addresses from recipient servers. It implements a **two-hop packet routing mechanism** similar to Tor's onion routing.
+
+### The Problem It Solves
+
+Without Private Routing:
+```
+Alice → [Alice's IP visible] → Bob's SMP Server → Bob
+```
+
+Bob's server (or Bob himself, if self-hosted) can see Alice's IP address when she sends messages.
+
+### How Private Routing Works
+
+With Private Routing enabled:
+```
+Alice → Forwarding Server → Destination Server → Bob
+        (sees Alice's IP)   (sees Forwarding IP)
+```
+
+1. Alice's client encrypts the message for Bob's destination server
+2. Wraps it in another encryption layer for a forwarding server
+3. Forwarding server relays without knowing the final recipient's queue ID
+4. Destination server receives from forwarding server, not Alice directly
+
+**Result:** Per-packet anonymity. No single server sees both sender AND recipient.
+
+---
+
+## A.2 Why Multiple SMP Servers?
+
+Running multiple SMP servers provides significant privacy advantages:
+
+| Feature | 1 Server | 4+ Servers | 10 Servers |
+|---------|----------|------------|------------|
+| Private Routing | ❌ Limited | ✅ Functional | ✅ Optimal |
+| Traffic Mixing | ❌ None | ✅ Basic | ✅ Strong |
+| Metadata Correlation | High Risk | Reduced | Minimal |
+| Single Point of Failure | Yes | Distributed | Highly Resilient |
+| Queue Distribution | Centralized | Spread | Maximum Entropy |
+
+### Traffic Mixing & Metadata Protection
+
+With 10 servers, SimpleX clients:
+- **Randomly allocate queues** across all available servers
+- **Route messages through different server pairs** for each conversation
+- **Prevent traffic analysis** by distributing patterns across multiple endpoints
+- **Eliminate correlation** between incoming and outgoing traffic on any single server
+
+Even if an adversary compromises one server, they only see a fraction of your network's traffic with no way to correlate it.
+
+---
+
+## A.3 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    RASPBERRY PI 4                           │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
+│  │ SMP #1  │ │ SMP #2  │ │ SMP #3  │ │ SMP #4  │           │
+│  │ :5223   │ │ :5224   │ │ :5225   │ │ :5226   │           │
+│  │ onion1  │ │ onion2  │ │ onion3  │ │ onion4  │           │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
+│  │ SMP #5  │ │ SMP #6  │ │ SMP #7  │ │ SMP #8  │           │
+│  │ :5227   │ │ :5228   │ │ :5229   │ │ :5230   │           │
+│  │ onion5  │ │ onion6  │ │ onion7  │ │ onion8  │           │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
+│  ┌─────────┐ ┌─────────┐ ┌─────────────────────┐           │
+│  │ SMP #9  │ │ SMP #10 │ │      XFTP #1        │           │
+│  │ :5231   │ │ :5232   │ │       :443          │           │
+│  │ onion9  │ │ onion10 │ │      onionX         │           │
+│  └─────────┘ └─────────┘ └─────────────────────┘           │
+├─────────────────────────────────────────────────────────────┤
+│                        TOR DAEMON                           │
+│            11 Hidden Services → 11 .onion addresses         │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   TOR NETWORK   │
+                    │   (3-hop relay) │
+                    └─────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │ SimpleX Clients │
+                    │ (Private Routing│
+                    │    enabled)     │
+                    └─────────────────┘
+```
+
+**Port Mapping:**
+
+| Instance | Local Port | Tor External | Onion Address |
+|----------|------------|--------------|---------------|
+| Original | 5223 | 5223 | unique .onion |
+| SMP #2 | 5224 | 5223 | unique .onion |
+| SMP #3 | 5225 | 5223 | unique .onion |
+| SMP #4 | 5226 | 5223 | unique .onion |
+| SMP #5 | 5227 | 5223 | unique .onion |
+| SMP #6 | 5228 | 5223 | unique .onion |
+| SMP #7 | 5229 | 5223 | unique .onion |
+| SMP #8 | 5230 | 5223 | unique .onion |
+| SMP #9 | 5231 | 5223 | unique .onion |
+| SMP #10 | 5232 | 5223 | unique .onion |
+
+Each server has its own Tor hidden service, so clients connect to `onion:5223` regardless of local port.
+
+---
+
+## A.4 Create Directories
+
+```bash
+# Create config and data directories for SMP 2-10
+sudo mkdir -p /etc/opt/simplex-smp{2,3,4,5,6,7,8,9,10}
+sudo mkdir -p /var/opt/simplex-smp{2,3,4,5,6,7,8,9,10}
+
+# Set ownership
+sudo chown -R simplex:simplex /etc/opt/simplex-smp{2,3,4,5,6,7,8,9,10}
+sudo chown -R simplex:simplex /var/opt/simplex-smp{2,3,4,5,6,7,8,9,10}
+
+# Verify
+ls -la /etc/opt/ | grep simplex-smp
+```
+
+Expected: 9 directories (smp2 through smp10), all owned by `simplex:simplex`.
+
+---
+
+## A.5 Configure Tor Hidden Services
+
+Add to `/etc/tor/torrc`:
+
+```bash
+sudo nano /etc/tor/torrc
+```
+
+Append:
+
+```bash
+# === SimpleX SMP Multi-Instance (2-10) ===
+HiddenServiceDir /var/lib/tor/simplex-smp2/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5224
+
+HiddenServiceDir /var/lib/tor/simplex-smp3/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5225
+
+HiddenServiceDir /var/lib/tor/simplex-smp4/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5226
+
+HiddenServiceDir /var/lib/tor/simplex-smp5/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5227
+
+HiddenServiceDir /var/lib/tor/simplex-smp6/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5228
+
+HiddenServiceDir /var/lib/tor/simplex-smp7/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5229
+
+HiddenServiceDir /var/lib/tor/simplex-smp8/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5230
+
+HiddenServiceDir /var/lib/tor/simplex-smp9/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5231
+
+HiddenServiceDir /var/lib/tor/simplex-smp10/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5232
+```
+
+Restart Tor and collect onion addresses:
+
+```bash
+sudo systemctl restart tor@default
+sleep 5
+
+# Get all onion addresses
+echo "=== ONION ADDRESSES ==="
+for i in 2 3 4 5 6 7 8 9 10; do
+  echo "SMP$i: $(sudo cat /var/lib/tor/simplex-smp$i/hostname)"
+done
+```
+
+**Save these addresses!**
+
+---
+
+## A.6 Initialize All SMP Servers
+
+The `smp-server` binary uses hardcoded paths. We use a symlink trick to initialize each instance.
+
+**For each instance (2-10), repeat:**
+
+```bash
+# Example for SMP2 - repeat for 3,4,5,6,7,8,9,10
+INSTANCE=2
+ONION="your-smp2-onion.onion"  # Replace with actual onion
+PASSWORD="YourSecurePassword"
+
+# Backup original paths
+sudo mv /etc/opt/simplex /etc/opt/simplex-backup 2>/dev/null || true
+sudo mv /var/opt/simplex /var/opt/simplex-backup 2>/dev/null || true
+
+# Create symlinks
+sudo ln -s /etc/opt/simplex-smp$INSTANCE /etc/opt/simplex
+sudo ln -s /var/opt/simplex-smp$INSTANCE /var/opt/simplex
+
+# Initialize
+sudo -u simplex smp-server init -n "$ONION" --password "$PASSWORD" -y
+
+# Remove symlinks
+sudo rm /etc/opt/simplex /var/opt/simplex
+
+# Restore original
+sudo mv /etc/opt/simplex-backup /etc/opt/simplex 2>/dev/null || true
+sudo mv /var/opt/simplex-backup /var/opt/simplex 2>/dev/null || true
+```
+
+---
+
+## A.7 Configure Ports, HTTPS, and SOCKS Proxy
+
+```bash
+# Configure all instances
+for i in 2 3 4 5 6 7 8 9 10; do
+  PORT=$((5222 + i))  # 5224, 5225, 5226, etc.
+  echo "Configuring SMP$i on port $PORT"
+  
+  # Set port
+  sudo sed -i "s/^port: .*/port: $PORT/" /etc/opt/simplex-smp$i/smp-server.ini
+  
+  # Disable HTTPS
+  sudo sed -i 's/^https:.*/# &/' /etc/opt/simplex-smp$i/smp-server.ini
+  
+  # Enable SOCKS proxy (CRITICAL for Private Routing!)
+  grep -q "^socks_proxy:" /etc/opt/simplex-smp$i/smp-server.ini || \
+    sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex-smp$i/smp-server.ini
+done
+
+# Also ensure original server has SOCKS proxy
+grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
+  sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
+
+# Verify
+echo "=== PORTS ==="
+grep "^port:" /etc/opt/simplex/smp-server.ini
+grep "^port:" /etc/opt/simplex-smp{2,3,4,5,6,7,8,9,10}/smp-server.ini
+
+echo "=== SOCKS PROXY ==="
+grep "socks_proxy" /etc/opt/simplex/smp-server.ini
+grep "socks_proxy" /etc/opt/simplex-smp{2,3,4,5,6,7,8,9,10}/smp-server.ini
+```
+
+Expected: Ports 5223-5232, all with `socks_proxy: 127.0.0.1:9050`.
+
+---
+
+## A.8 Create systemd Template Unit
+
+```bash
+sudo tee /etc/systemd/system/smp-server@.service > /dev/null <<'EOF'
+[Unit]
+Description=SimpleX SMP Server (Instance %i)
+After=network.target tor@default.service
+Requires=tor@default.service
+
+[Service]
+Type=simple
+User=simplex
+Group=simplex
+ExecStart=/usr/local/bin/smp-server start
+
+# Map instance paths to default paths expected by smp-server
+BindPaths=/etc/opt/simplex-smp%i:/etc/opt/simplex
+BindPaths=/var/opt/simplex-smp%i:/var/opt/simplex
+
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+The magic is in `BindPaths=` – systemd remaps the directories so each instance thinks it's using the default paths.
+
+---
+
+## A.9 Enable and Start All Instances
+
+```bash
+sudo systemctl daemon-reload
+
+# Enable all instances (2-10)
+sudo systemctl enable smp-server@{2,3,4,5,6,7,8,9,10}
+
+# Start all instances
+sudo systemctl start smp-server@{2,3,4,5,6,7,8,9,10}
+
+# Restart original to pick up SOCKS proxy config
+sudo systemctl restart smp-server
+
+# Check status
+sudo systemctl status smp-server@{2,3,4,5,6,7,8,9,10} --no-pager | grep -E "(smp-server@|Active:)"
+```
+
+All should show `active (running)`.
+
+---
+
+## A.10 Verify All Servers
+
+### Check ports:
+
+```bash
+sudo ss -lntp | grep smp-server | wc -l
+```
+
+Should show **10** (original + 9 new instances).
+
+### Test Tor connectivity:
+
+```bash
+echo "=== TOR CONNECTIVITY TEST ==="
+for i in "" 2 3 4 5 6 7 8 9 10; do
+  if [ -z "$i" ]; then
+    ONION=$(sudo cat /var/lib/tor/simplex-smp/hostname)
+    NAME="Original"
+  else
+    ONION=$(sudo cat /var/lib/tor/simplex-smp$i/hostname)
+    NAME="SMP$i"
+  fi
+  torsocks nc -zv "$ONION" 5223 2>/dev/null && echo "✓ $NAME OK" || echo "✗ $NAME FAIL"
+done
+```
+
+All 10 should succeed.
+
+---
+
+## A.11 Client Configuration
+
+### Add All Servers to SimpleX App
+
+1. Open SimpleX Chat
+2. Go to **Settings → Network & Servers → SMP Servers**
+3. For each server, tap **+ Add Server** and paste:
+   ```
+   smp://FINGERPRINT:PASSWORD@ONION_ADDRESS:5223
+   ```
+4. **Enable "Use for new connections"** on ALL servers ✅
+
+### Enable Private Routing
+
+1. **Settings → Network & Servers → Private Message Routing**
+2. Set **Private routing** to: `Always` or `Unknown servers`
+3. Set **Allow downgrade** to: `Yes`
+
+### Remove Default SimpleX Servers (Optional)
+
+For maximum privacy, disable the default SimpleX Chat servers so all traffic routes through your infrastructure only.
+
+---
+
+## A.12 Resource Usage
+
+After setup, check your Pi's load:
+
+```bash
+echo "=== SYSTEM STATUS ==="
+uptime
+free -h
+ps aux | grep -E "(smp|xftp)" | grep -v grep | wc -l
+```
+
+**Expected with 10 SMP + 1 XFTP:**
+
+| Resource | Usage |
+|----------|-------|
+| CPU | ~2-5% idle |
+| RAM | ~400-500 MB |
+| Load Average | < 0.5 |
+
+A Raspberry Pi 4 (4GB) handles 10+ SMP servers easily.
+
+---
+
+## A.13 Security Considerations
+
+### What This Setup Provides
+
+✅ **IP Address Protection** – Private routing hides sender IPs  
+✅ **Traffic Mixing** – Messages distributed across 10 servers  
+✅ **Metadata Resistance** – No single server sees full traffic pattern  
+✅ **Tor-Only Access** – Zero clearnet exposure  
+✅ **Self-Hosted** – Full control over infrastructure  
+
+### What This Does NOT Provide
+
+❌ **Protection against global adversary** – Nation-state level traffic analysis  
+❌ **Protection if ALL servers compromised** – Distribute across locations  
+❌ **End-to-end encryption** – Handled by SimpleX protocol itself  
+
+---
+
+## A.14 Multi-SMP Quick Reference
+
+```bash
+# Start all instances
+sudo systemctl start smp-server smp-server@{2,3,4,5,6,7,8,9,10}
+
+# Stop all instances
+sudo systemctl stop smp-server smp-server@{2,3,4,5,6,7,8,9,10}
+
+# Restart all instances
+sudo systemctl restart smp-server smp-server@{2,3,4,5,6,7,8,9,10}
+
+# View logs for instance 5
+sudo journalctl -u smp-server@5 -f
+
+# Check all ports
+sudo ss -lntp | grep smp-server
+
+# Count running instances
+sudo ss -lntp | grep smp-server | wc -l
+```
+
+---
+
+# Appendix B: SSH over Tor
+
+*Coming in v0.7*
+
+---
+
+# Appendix C: Tor v3 Client Authorization
+
+*Coming in v0.8*
+
+---
+
+# Appendix D: Vanguards
+
+*Coming in v0.9*
+
+---
+
+# Roadmap: Future Development
+
+This project is actively developed. The following features are planned:
+
+## Security Hardening
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Multi-SMP Private Routing** | ✅ v0.6 | 10 SMP servers for traffic mixing |
+| **SSH over Tor** | 🔜 v0.7 | Admin access only via .onion |
+| **Tor v3 Client Authorization** | 🔜 v0.8 | Hidden services invisible without keys |
+| **Vanguards** | 🔜 v0.9 | Guard discovery protection |
+| **LUKS Full-Disk Encryption** | 📋 Planned | Protect data at rest |
+| **Dead Man's Switch** | 📋 Planned | Auto-wipe on tampering |
+
+## Anti-Abuse & Performance
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Queue Creation Password** | ✅ v0.1 | Restrict who can create queues |
+| **Proof-of-Work (PoW)** | 📋 Planned | CPU-based spam prevention |
+| **Rate Limiting** | 📋 Planned | Connection/message limits |
+| **Connection Limits** | 📋 Planned | HiddenServiceMaxStreams |
+
+## Monitoring & Operations
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Prometheus Metrics** | 📋 Planned | Server statistics export |
+| **Grafana Dashboards** | 📋 Planned | Visual monitoring |
+| **Web UI** | 📋 Planned | Browser-based admin panel |
+| **Automated Backups** | 📋 Planned | Encrypted backup to remote |
+| **Health Checks** | 📋 Planned | Automated alerting |
+
+## Distribution & Deployment
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Pre-built ARM64 Binaries** | 📋 Planned | Skip 60min build time |
+| **GPG Signed Releases** | 📋 Planned | Verify authenticity |
+| **Docker Images** | 📋 Planned | Container deployment |
+| **Ansible Playbooks** | 📋 Planned | Automated setup |
+
+## Testing & Security
+
+| Feature | Status | Description |
+|---------|--------|-------------|
+| **Stress Testing Framework** | 📋 Planned | Load testing tools |
+| **Penetration Testing Guide** | 📋 Planned | Security audit checklist |
+| **Threat Model Documentation** | 📋 Planned | Detailed security analysis |
+
+---
+
 ## Changelog
 
-### v0.4 (Current)
+### v0.6 (Current)
+- **ADDED:** Comprehensive introduction with use cases and threat model
+- **ADDED:** SOCKS proxy configuration for Private Routing (CRITICAL fix)
+- **ADDED:** Roadmap section with future development plans
+- **FIXED:** Private Routing error "does not exist (Name or service not known)"
+- **IMPROVED:** Troubleshooting section with Private Routing errors
+
+### v0.5
+- **ADDED:** Appendix A - Multi-SMP for Private Message Routing (10 servers)
+- **ADDED:** Optional Hardening section structure
+
+### v0.4
 - **FIXED:** sed command now handles both `https: on` and `https: 443` formats
 - **FIXED:** Explicit `mkdir` for files directory in section 8.2
 - **ADDED:** Verification step for files directory
@@ -647,4 +1317,22 @@ echo "XFTP: $(sudo cat /var/lib/tor/simplex-xftp/hostname)"
 
 ---
 
-(C) by cannatoshi
+## License
+
+This guide is released under **CC BY-SA 4.0**.
+
+SimpleX software is licensed under **AGPL-3.0**.
+
+---
+
+## Contributing
+
+Found a bug? Have an improvement? 
+
+- Open an issue on GitHub
+- Submit a pull request
+- Contact via SimpleX (server addresses available on request)
+
+---
+
+(C) 2025 cannatoshi
