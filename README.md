@@ -1,9 +1,21 @@
 # SimpleX Private Infrastructure on Raspberry Pi
-## Tor-Only SMP + XFTP Server with Multi-Instance Private Routing
 
-A battle-tested, reproducible guide to deploy your own **high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
+## Tor-Only Closed User Group Messaging with Multi-Instance Private Routing
 
-> **Version:** 0.6 (19. December 2025)  
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%204-c51a4a.svg)](https://www.raspberrypi.com/)
+[![Tor v3](https://img.shields.io/badge/Tor-v3%20Onion-7D4698.svg)](https://www.torproject.org/)
+[![SimpleX](https://img.shields.io/badge/SimpleX-6.4.5.1-1a73e8.svg)](https://simplex.chat/)
+[![Encryption](https://img.shields.io/badge/Encryption-E2EE%20+%20Post--Quantum-blue.svg)](#security-model)
+[![Infrastructure](https://img.shields.io/badge/Infrastructure-Closed%20System-critical.svg)](#closed-user-group-architecture)
+[![Self-Hosted](https://img.shields.io/badge/Self--Hosted-100%25-success.svg)](#about-this-project)
+[![No Tracking](https://img.shields.io/badge/Tracking-None-brightgreen.svg)](#security-model)
+[![Maintenance](https://img.shields.io/badge/Maintained-Actively-success.svg)](https://github.com/cannatoshi/simplex-smb-xftp-via-tor-on-rpi-hardened/commits/main)
+[![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](#contributing)
+
+A battle-tested, reproducible guide to deploy your own **closed-system, high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
+
+> **Version:** 0.7 (20. December 2025)  
 > **Tested on:** Raspberry Pi 4 (4GB), Raspberry Pi OS Lite 64-bit (Bookworm)  
 > **SimpleX Version:** 6.4.5.1
 
@@ -11,28 +23,156 @@ A battle-tested, reproducible guide to deploy your own **high-security SimpleX m
 
 ## About This Project
 
-This guide provides a **complete, self-hosted messaging infrastructure** designed for individuals and organizations requiring maximum privacy and metadata protection. Unlike traditional messaging solutions, this setup ensures:
+This guide provides a **complete, self-hosted messaging infrastructure for closed user groups** – families, organizations, teams, or any group requiring **maximum privacy and operational security**.
+
+Unlike using public SimpleX infrastructure, this setup creates an **isolated, invisible messaging network** where:
 
 - **Zero clearnet exposure** – All traffic routes exclusively through Tor v3 onion services
-- **No user identifiers** – SimpleX uses no phone numbers, emails, or usernames
+- **No public server listing** – Your .onion addresses exist nowhere on the internet
+- **Closed user group** – Only people you explicitly invite can communicate
+- **Zero metadata leakage** – No third-party servers see your traffic patterns
 - **Full infrastructure control** – You own and operate every component
-- **Private Message Routing** – Multi-hop routing prevents any single server from seeing sender AND recipient
-- **Metadata resistance** – Traffic mixing across multiple servers defeats correlation analysis
 
-### Who Is This For?
+---
 
-| Use Case | Why SimpleX + Tor? |
-|----------|-------------------|
-| **Journalists & Media** | Protect sources, secure editorial communications, defeat surveillance |
-| **Whistleblowers** | Anonymous tip submission, secure document transfer |
-| **Activists & NGOs** | Organize without exposing social graphs to adversaries |
-| **Legal & Medical** | Client/patient confidentiality, privileged communications |
-| **Families & Friends** | Private group communication without Big Tech surveillance |
-| **Government & Authorities** | Secure internal communications, classified discussions |
-| **Research & Academia** | Protect research subjects, secure collaboration |
-| **Businesses** | Trade secrets, M&A discussions, competitive intelligence protection |
+## Closed User Group Architecture
 
-### Why Raspberry Pi?
+### The Problem with Public Infrastructure
+
+When using **public SimpleX servers** (default preset servers or Flux servers), your messaging infrastructure is:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    PUBLIC SIMPLEX INFRASTRUCTURE                    │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   smp11.simplex.im ◄──── Publicly known address                     │
+│   smp12.simplex.im ◄──── Can be monitored by adversaries            │
+│   smp14.simplex.im ◄──── Traffic patterns observable                │
+│   flux-smp-*.runonflux.io ◄── Third-party operated                  │
+│                                                                     │
+│   ⚠️  Adversary knows WHERE to look                                 │
+│   ⚠️  Server operators can see connection metadata                  │
+│   ⚠️  Hosting providers log IP addresses                            │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+Even with SimpleX's excellent encryption and privacy features, using public servers means:
+- Adversaries **know which servers to monitor**
+- Server operators (even trusted ones) **can see connection patterns**
+- Hosting providers **may log transport metadata**
+- Your traffic is **mixed with millions of other users** (which can be good or bad)
+
+### The Closed System Solution
+
+This guide creates a **completely isolated infrastructure**:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    YOUR CLOSED INFRASTRUCTURE                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   abc123...xyz.onion ◄──── Address known only to your group         │
+│   def456...xyz.onion ◄──── Not listed anywhere on the internet      │
+│   ghi789...xyz.onion ◄──── Cannot be discovered by scanning         │
+│   ... (10 servers)   ◄──── You control ALL infrastructure           │
+│                                                                     │
+│   ✅ Adversary doesn't know WHERE to look                           │
+│   ✅ YOU are the only operator                                      │
+│   ✅ No third-party sees any metadata                               │
+│   ✅ Traffic patterns invisible to outside observers                │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**The fundamental security advantage:** An adversary must first **discover that your infrastructure exists** before they can even attempt to monitor it. With Tor v3 hidden services, this is computationally infeasible.
+
+### Server Configuration: Closed vs. Hybrid Mode
+
+#### Closed Mode (Maximum Security)
+
+In your SimpleX client, **disable ALL public servers**:
+
+```
+Settings → Network & Servers → SMP Servers:
+  ☐ SimpleX Chat servers (DISABLED)
+  ☐ Flux servers (DISABLED)
+  ☑ Your .onion servers (ENABLED + "Use for new connections" ✓)
+
+Settings → Network & Servers → XFTP Servers:
+  ☐ SimpleX Chat servers (DISABLED)
+  ☐ Flux servers (DISABLED)  
+  ☑ Your .onion server (ENABLED + "Use for new connections" ✓)
+```
+
+**Result:** 
+- All communication stays within your closed infrastructure
+- No metadata leaks to any third party
+- Only members of your group can communicate
+- Maximum operational security
+
+**Limitation:** You cannot communicate with users outside your group.
+
+#### Hybrid Mode (Compatibility with Reduced Security)
+
+If you need to communicate with **external SimpleX users**:
+
+```
+Settings → Network & Servers → SMP Servers:
+  ☑ SimpleX Chat servers (ENABLED, but "Use for new connections" ✗)
+  ☐ Flux servers (DISABLED)
+  ☑ Your .onion servers (ENABLED + "Use for new connections" ✓)
+```
+
+**How this works:**
+- **New connections** you create use **only your servers** (your queues stay private)
+- **External users** can reach you via public servers (you add their server as "known")
+- Your infrastructure remains hidden, but you can communicate outside
+
+**Trade-off:** 
+- ✅ You can message anyone on SimpleX network
+- ⚠️ Public servers see some of your connection metadata
+- ⚠️ Traffic to external contacts is partially visible
+
+#### Server Mode Comparison
+
+| Feature | Closed Mode | Hybrid Mode |
+|---------|-------------|-------------|
+| **External communication** | ❌ Only your group | ✅ Anyone on SimpleX |
+| **Infrastructure visibility** | ✅ Completely hidden | ⚠️ Partially exposed |
+| **Metadata to third parties** | ✅ Zero | ⚠️ Some (external contacts) |
+| **Recommended for** | High-security groups | Mixed use cases |
+
+---
+
+## Who Is This For?
+
+This infrastructure is designed for **closed user groups** requiring maximum operational security:
+
+| Use Case | Why Closed Infrastructure? |
+|----------|---------------------------|
+| **Journalist Networks** | Protect sources, editorial communications invisible to adversaries |
+| **Whistleblower Systems** | Tip submission infrastructure that cannot be discovered |
+| **Activist Cells** | Organize without exposing existence of communication network |
+| **Legal Teams** | Attorney-client privilege with infrastructure you control |
+| **Medical Teams** | Patient data on systems with zero third-party access |
+| **Family Privacy** | Private communication without Big Tech or government visibility |
+| **Research Groups** | Protect subjects and collaboration from surveillance |
+| **Corporate Security** | M&A, trade secrets on infrastructure competitors cannot find |
+| **Government/Military** | Classified communications on controlled infrastructure |
+
+### When NOT to Use This
+
+This guide is **overkill** if you:
+- Just want better privacy than WhatsApp (use SimpleX with default servers)
+- Need to communicate with many external people (use hybrid mode at minimum)
+- Don't have time to maintain infrastructure (use managed services)
+- Trust SimpleX/Flux operators (their servers are well-run)
+
+---
+
+## Why Raspberry Pi?
 
 This guide uses a Raspberry Pi as a **low-budget, high-security** reference platform:
 
@@ -44,10 +184,13 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 | **Air-Gap Ready** | Can operate completely isolated from main networks |
 | **Reproducible** | Identical setup across multiple locations |
 | **Disposable** | SD card can be destroyed; device is replaceable |
+| **Plausible Deniability** | "It's just a media server" |
 
 > **Note:** This architecture scales to VPS, dedicated servers, or Kubernetes clusters. The Raspberry Pi version proves the concept at minimal cost before larger deployments.
 
-### What You Will Build
+---
+
+## What You Will Build
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -59,8 +202,8 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 │   │         (Private Message Routing Pool)              │   │
 │   │                                                     │   │
 │   │   Each server = unique .onion address               │   │
+│   │   Addresses known ONLY to your group                │   │
 │   │   Traffic distributed across all instances          │   │
-│   │   No single point of metadata correlation           │   │
 │   └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │   ┌─────────────────────────────────────────────────────┐   │
@@ -73,10 +216,11 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 │                                                             │
 │   ┌─────────────────────────────────────────────────────┐   │
 │   │              TOR DAEMON                             │   │
-│   │         (11 Hidden Services)                        │   │
+│   │         (12 Hidden Services)                        │   │
 │   │                                                     │   │
-│   │   All services Tor-only, zero clearnet             │   │
-│   │   v3 onion addresses (ed25519 crypto)              │   │
+│   │   All services Tor-only, zero clearnet              │   │
+│   │   v3 onion addresses (ed25519 crypto)               │   │
+│   │   Addresses not discoverable by any scan            │   │
 │   └─────────────────────────────────────────────────────┘   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -84,25 +228,100 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
                               ▼
                     ┌─────────────────┐
                     │   TOR NETWORK   │
+                    │  (Your traffic  │
+                    │   hidden among  │
+                    │   all Tor users)│
                     └─────────────────┘
                               │
                               ▼
                     ┌─────────────────┐
-                    │ SimpleX Clients │
-                    │  (iOS/Android/  │
-                    │   Desktop)      │
+                    │  YOUR CLIENTS   │
+                    │  (Only people   │
+                    │   you invited)  │
                     └─────────────────┘
 ```
 
-### Security Model
+---
+
+## Security Model
 
 | Layer | Protection |
 |-------|------------|
-| **Transport** | Tor v3 hidden services (ed25519, no exit nodes) |
+| **Discovery** | Tor v3 onion = address cannot be found without knowing it |
+| **Transport** | Tor hidden services (ed25519, no exit nodes) |
 | **Application** | SimpleX double-ratchet E2EE + post-quantum resistance |
 | **Metadata** | Private routing, traffic mixing, no user IDs |
-| **Infrastructure** | Self-hosted, no third-party dependencies |
+| **Infrastructure** | Self-hosted, YOU are the only operator |
 | **Network** | Firewall blocks all clearnet access to services |
+
+### The Discovery Problem (Why Closed Systems Matter)
+
+Traditional attacks on messaging require knowing **where** to look:
+
+| Attack Type | Public Servers | Your Closed Infrastructure |
+|-------------|----------------|---------------------------|
+| **Traffic Analysis** | ✅ Possible (known endpoints) | ❌ Must find endpoints first |
+| **Server Compromise** | ✅ Target known servers | ❌ Which .onion to target? |
+| **Legal Requests** | ✅ Subpoena known operators | ❌ Operator unknown |
+| **Network Monitoring** | ✅ Monitor known IPs | ❌ No IPs, only Tor traffic |
+
+**The security advantage is not just encryption – it's invisibility.**
+
+---
+
+## Threat Model & Limitations
+
+> **Transparency is security.** This section documents what this setup protects against – and what it doesn't.
+
+### What This Setup Protects Against ✅
+
+| Threat Actor | Protection Level | How It Works |
+|--------------|------------------|--------------|
+| **Mass surveillance** | ✅ Strong | Your infrastructure doesn't exist in any database |
+| **Targeted server monitoring** | ✅ Strong | Adversary must discover your .onion addresses first |
+| **ISP / Network observer** | ✅ Strong | All traffic is Tor-encrypted; destination hidden |
+| **Third-party metadata** | ✅ Strong | No SimpleX/Flux servers see your patterns |
+| **Server operator (SimpleX Ltd.)** | ✅ Strong | You ARE the operator; they see nothing |
+| **Traffic correlation (external)** | ✅ Strong | 10 servers = 10 separate Tor circuits |
+
+### What This Setup Does NOT Protect Against ❌
+
+| Threat Actor | Protection Level | Why |
+|--------------|------------------|-----|
+| **Physical device access** | ❌ None | One device = one point of compromise |
+| **Root compromise of Pi** | ❌ None | Attacker sees all 10 server instances |
+| **You (the operator)** | ❌ None | You control all servers |
+| **Insider threat** | ⚠️ Limited | Group member can leak .onion addresses |
+| **Nation-state with Tor visibility** | ⚠️ Limited | Long-term traffic analysis possible |
+| **Endpoint compromise** | ❌ None | Client device hacked = game over |
+
+### The Single-Operator Consideration
+
+All 10 SMP servers run on **one device** under **one operator** (you). This means:
+
+**Advantages:**
+- Simpler administration
+- Lower cost
+- Full control
+
+**Limitations:**
+- No protection from yourself (you can correlate everything)
+- Single point of physical failure
+- If compromised, ALL servers are compromised
+
+**For higher security, consider:**
+- Distributing servers across multiple physical locations
+- Having different trusted people operate different servers
+- Geographic distribution across jurisdictions
+
+### Recommended Use Cases by Threat Level
+
+| Threat Level | Recommended Setup | Example Users |
+|--------------|-------------------|---------------|
+| **Standard** | Closed Mode, single Pi | Families, small teams |
+| **Elevated** | Closed Mode + Appendix B-D | NGOs, journalists |
+| **High** | Multi-location + different operators | Activists in hostile states |
+| **Extreme** | Air-gapped + multi-jurisdiction + burner devices | Conflict zones, whistleblowers |
 
 ---
 
@@ -125,7 +344,7 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 
 ### Optional Hardening (Recommended for High-Security)
 - [Appendix A: Multi-SMP for Private Message Routing](#appendix-a-multi-smp-for-private-message-routing)
-- [Appendix B: SSH over Tor](#appendix-b-ssh-over-tor) *(coming soon)*
+- [Appendix B: SSH over Tor](#appendix-b-ssh-over-tor)
 - [Appendix C: Tor v3 Client Authorization](#appendix-c-tor-v3-client-authorization) *(coming soon)*
 - [Appendix D: Vanguards](#appendix-d-vanguards) *(coming soon)*
 
@@ -253,7 +472,12 @@ echo "SMP:  $SMP_ONION"
 echo "XFTP: $XFTP_ONION"
 ```
 
-**Write these down!** You'll need them for initialization and client setup.
+**⚠️ CRITICAL: Store these addresses securely!**
+
+These .onion addresses are the **only way** to reach your infrastructure. They should be:
+- Shared only with members of your closed group
+- Stored in encrypted form (password manager, encrypted note)
+- Never posted publicly or sent over insecure channels
 
 ---
 
@@ -376,8 +600,6 @@ sudo sed -i 's/^port: .*/port: 5223/' /etc/opt/simplex/smp-server.ini
 grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
   sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
 ```
-
-> **Note:** The config may have `https: on` or `https: 443` depending on version. The sed command above handles both.
 
 ### 7.2 Fix permissions
 
@@ -536,11 +758,11 @@ table inet filter {
     iif lo accept
     ct state established,related accept
 
-    # SSH from LAN only
+    # SSH from LAN only (remove after completing Appendix B)
     ip saddr 192.168.0.0/16 tcp dport 22 accept
     ip saddr 10.0.0.0/8 tcp dport 22 accept
 
-    # Block SimpleX ports from clearnet
+    # Block SimpleX ports from clearnet (only accessible via Tor)
     tcp dport { 443, 5223 } drop
 
     ip protocol icmp accept
@@ -612,13 +834,45 @@ Copy these for your SimpleX clients.
 - Android/iOS: Install Orbot, enable SOCKS proxy `127.0.0.1:9050`
 - Desktop: Settings → Network → SOCKS proxy `127.0.0.1:9050`
 
-### 12.2 Add your servers
+### 12.2 Configure for Closed User Group (Recommended)
 
-1. Settings → Network & Servers → SMP Servers → Add
-2. Paste: `smp://<fingerprint>:<password>@<onion>:5223`
+**Step 1: Disable public servers**
 
-3. Settings → Network & Servers → XFTP Servers → Add
-4. Paste: `xftp://<fingerprint>@<onion>:443`
+```
+Settings → Network & Servers → SMP Servers:
+  → SimpleX Chat servers → Disable (toggle off)
+  → Flux servers → Disable (toggle off, if present)
+
+Settings → Network & Servers → XFTP Servers:
+  → SimpleX Chat servers → Disable (toggle off)
+  → Flux servers → Disable (toggle off, if present)
+```
+
+**Step 2: Add your servers**
+
+```
+Settings → Network & Servers → SMP Servers → + Add Server
+  → Paste: smp://<fingerprint>:<password>@<onion>:5223
+  → Enable "Use for new connections" ✓
+
+Settings → Network & Servers → XFTP Servers → + Add Server
+  → Paste: xftp://<fingerprint>@<onion>:443
+  → Enable "Use for new connections" ✓
+```
+
+**Step 3: Verify configuration**
+
+Your server list should show:
+- ✅ Your .onion servers: Enabled + "Use for new connections"
+- ❌ SimpleX Chat servers: Disabled
+- ❌ Flux servers: Disabled
+
+### 12.3 Distribute to Group Members
+
+Share server addresses **securely** with your group:
+- In person (QR code scan)
+- Via already-secure channel (existing SimpleX contact, Signal, encrypted email)
+- Never via unencrypted email, SMS, or public channels
 
 ---
 
@@ -745,7 +999,7 @@ sudo journalctl -u xftp-server -f
 # Check ports
 sudo ss -lntp | grep -E ':(443|5223)'
 
-# Export addresses
+# Export addresses (KEEP THESE SECRET!)
 echo "SMP:  $(sudo cat /var/lib/tor/simplex-smp/hostname)"
 echo "XFTP: $(sudo cat /var/lib/tor/simplex-xftp/hostname)"
 ```
@@ -797,27 +1051,24 @@ Alice → Forwarding Server → Destination Server → Bob
 
 ---
 
-## A.2 Why Multiple SMP Servers?
+## A.2 Why Multiple SMP Servers for a Closed Group?
 
-Running multiple SMP servers provides significant privacy advantages:
+Even within your closed infrastructure, running multiple SMP servers provides significant privacy advantages:
 
 | Feature | 1 Server | 4+ Servers | 10 Servers |
 |---------|----------|------------|------------|
 | Private Routing | ❌ Limited | ✅ Functional | ✅ Optimal |
 | Traffic Mixing | ❌ None | ✅ Basic | ✅ Strong |
-| Metadata Correlation | High Risk | Reduced | Minimal |
-| Single Point of Failure | Yes | Distributed | Highly Resilient |
+| Internal Correlation | High | Reduced | Minimal |
 | Queue Distribution | Centralized | Spread | Maximum Entropy |
 
-### Traffic Mixing & Metadata Protection
+### Traffic Mixing Within Your Group
 
-With 10 servers, SimpleX clients:
-- **Randomly allocate queues** across all available servers
-- **Route messages through different server pairs** for each conversation
-- **Prevent traffic analysis** by distributing patterns across multiple endpoints
-- **Eliminate correlation** between incoming and outgoing traffic on any single server
-
-Even if an adversary compromises one server, they only see a fraction of your network's traffic with no way to correlate it.
+With 10 servers, even within your closed group:
+- **Queues distributed randomly** across all servers
+- **Different server pairs** used for each conversation
+- **Traffic patterns harder to analyze** even for you as operator
+- **Separation of concerns** – compromise of one server doesn't reveal all traffic
 
 ---
 
@@ -845,20 +1096,8 @@ Even if an adversary compromises one server, they only see a fraction of your ne
 ├─────────────────────────────────────────────────────────────┤
 │                        TOR DAEMON                           │
 │            11 Hidden Services → 11 .onion addresses         │
+│            (All addresses known ONLY to your group)         │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │   TOR NETWORK   │
-                    │   (3-hop relay) │
-                    └─────────────────┘
-                              │
-                              ▼
-                    ┌─────────────────┐
-                    │ SimpleX Clients │
-                    │ (Private Routing│
-                    │    enabled)     │
-                    └─────────────────┘
 ```
 
 **Port Mapping:**
@@ -955,13 +1194,13 @@ sudo systemctl restart tor@default
 sleep 5
 
 # Get all onion addresses
-echo "=== ONION ADDRESSES ==="
+echo "=== ONION ADDRESSES (KEEP SECRET!) ==="
 for i in 2 3 4 5 6 7 8 9 10; do
   echo "SMP$i: $(sudo cat /var/lib/tor/simplex-smp$i/hostname)"
 done
 ```
 
-**Save these addresses!**
+**Save these addresses securely!** Share only with your closed group members.
 
 ---
 
@@ -1124,27 +1363,33 @@ All 10 should succeed.
 
 ---
 
-## A.11 Client Configuration
+## A.11 Client Configuration for Closed Group
 
-### Add All Servers to SimpleX App
+### Add All 10 Servers to SimpleX App
+
+For each member of your closed group:
 
 1. Open SimpleX Chat
 2. Go to **Settings → Network & Servers → SMP Servers**
-3. For each server, tap **+ Add Server** and paste:
+3. **Disable all public servers** (SimpleX Chat, Flux)
+4. For each of your 10 servers, tap **+ Add Server** and paste:
    ```
    smp://FINGERPRINT:PASSWORD@ONION_ADDRESS:5223
    ```
-4. **Enable "Use for new connections"** on ALL servers ✅
+5. **Enable "Use for new connections"** on ALL 10 servers ✅
 
 ### Enable Private Routing
 
 1. **Settings → Network & Servers → Private Message Routing**
-2. Set **Private routing** to: `Always` or `Unknown servers`
-3. Set **Allow downgrade** to: `Yes`
+2. Set **Private routing** to: `Always`
+3. Set **Allow downgrade** to: `No` (for closed groups, all servers support it)
 
-### Remove Default SimpleX Servers (Optional)
+### Verify Closed Configuration
 
-For maximum privacy, disable the default SimpleX Chat servers so all traffic routes through your infrastructure only.
+Each group member's server list should show:
+- ✅ Your 10 .onion servers: Enabled + "Use for new connections"
+- ❌ SimpleX Chat servers: Disabled
+- ❌ Flux servers: Disabled
 
 ---
 
@@ -1175,17 +1420,19 @@ A Raspberry Pi 4 (4GB) handles 10+ SMP servers easily.
 
 ### What This Setup Provides
 
-✅ **IP Address Protection** – Private routing hides sender IPs  
-✅ **Traffic Mixing** – Messages distributed across 10 servers  
-✅ **Metadata Resistance** – No single server sees full traffic pattern  
-✅ **Tor-Only Access** – Zero clearnet exposure  
-✅ **Self-Hosted** – Full control over infrastructure  
+✅ **Complete isolation** – All traffic stays within your closed infrastructure  
+✅ **Traffic mixing** – Messages distributed across 10 servers  
+✅ **Private routing** – No server sees both sender and recipient  
+✅ **Discovery protection** – Adversary must find your .onion addresses first  
+✅ **Self-hosted** – You are the only operator  
 
 ### What This Does NOT Provide
 
-❌ **Protection against global adversary** – Nation-state level traffic analysis  
-❌ **Protection if ALL servers compromised** – Distribute across locations  
-❌ **End-to-end encryption** – Handled by SimpleX protocol itself  
+❌ **Multi-operator mixing** – All servers under your control  
+❌ **Physical distribution** – All servers on one device  
+❌ **Protection from you** – You can correlate all traffic if you choose  
+
+> **See [Threat Model & Limitations](#threat-model--limitations)** for detailed analysis.
 
 ---
 
@@ -1209,13 +1456,523 @@ sudo ss -lntp | grep smp-server
 
 # Count running instances
 sudo ss -lntp | grep smp-server | wc -l
+
+# Export all addresses (KEEP SECRET!)
+echo "=== ALL SERVER ADDRESSES ==="
+echo "SMP1: $(sudo cat /var/lib/tor/simplex-smp/hostname)"
+for i in 2 3 4 5 6 7 8 9 10; do
+  echo "SMP$i: $(sudo cat /var/lib/tor/simplex-smp$i/hostname)"
+done
+echo "XFTP: $(sudo cat /var/lib/tor/simplex-xftp/hostname)"
 ```
 
 ---
 
 # Appendix B: SSH over Tor
 
-*Coming in v0.7*
+> **Prerequisite:** Complete Sections 1-13 (Core Setup) first.  
+> **Difficulty:** Beginner-Intermediate  
+> **Time:** 15-20 minutes  
+> **Result:** SSH access exclusively via Tor hidden service – zero clearnet exposure
+
+---
+
+## B.1 Why SSH over Tor?
+
+Your SimpleX infrastructure is Tor-only and invisible. Your SSH access should be too.
+
+### The Problem
+
+```
+┌──────────────┐                    ┌──────────────┐
+│   Admin PC   │ ──── SSH:22 ────▶  │ Raspberry Pi │
+│ (Real IP)    │    (Clearnet)      │ (Real IP)    │
+└──────────────┘                    └──────────────┘
+        ↓
+   ISP logs connection
+   Pi exposed on port 22
+   Brute-force attacks possible
+   Administration reveals Pi location
+```
+
+Even with your SimpleX services hidden, SSH over clearnet:
+- Reveals the Pi's IP address to your ISP
+- Creates a target for attackers
+- Links your admin sessions to a physical location
+- Undermines the "invisible infrastructure" concept
+
+### The Solution
+
+```
+┌──────────────┐                    ┌──────────────┐
+│   Admin PC   │ ══ Tor Circuit ══▶ │ Raspberry Pi │
+│ (Anonymous)  │   (.onion:22)      │ (Invisible)  │
+└──────────────┘                    └──────────────┘
+        ↓
+   No ISP visibility to destination
+   No exposed ports on clearnet
+   No brute-force surface
+   Admin from anywhere anonymously
+```
+
+### Benefits
+
+| Feature | Description |
+|---------|-------------|
+| **Zero clearnet exposure** | Port 22 never touches the internet |
+| **Location independence** | Admin from any country, any network |
+| **ISP invisibility** | Only Tor traffic visible, destination hidden |
+| **NAT/Firewall bypass** | Works behind CGNAT, hotel WiFi, corporate firewalls |
+| **Brute-force immunity** | Attackers can't find what doesn't exist |
+| **Consistent security model** | Everything via Tor, nothing via clearnet |
+
+---
+
+## B.2 Architecture
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                      RASPBERRY PI                              │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│   ┌────────────────────┐     ┌────────────────────────────┐   │
+│   │      SSHD          │     │        TOR DAEMON          │   │
+│   │   127.0.0.1:22     │◄────│   HiddenServicePort 22     │   │
+│   │                    │     │   → xyzabc...onion:22      │   │
+│   └────────────────────┘     └────────────────────────────┘   │
+│                                                                │
+│   ┌────────────────────────────────────────────────────────┐   │
+│   │                     NFTABLES                           │   │
+│   │           tcp dport 22 from clearnet → DROP            │   │
+│   │           tcp dport 22 from 127.0.0.1 → ACCEPT         │   │
+│   └────────────────────────────────────────────────────────┘   │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼ (Tor only)
+                    ┌─────────────────┐
+                    │   TOR NETWORK   │
+                    └─────────────────┘
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │   Admin Client  │
+                    │   (torsocks)    │
+                    └─────────────────┘
+```
+
+---
+
+## B.3 Configure Tor Hidden Service for SSH
+
+Add the SSH hidden service to your existing Tor configuration:
+
+```bash
+sudo nano /etc/tor/torrc
+```
+
+Append at the end:
+
+```bash
+# === SSH Administration ===
+HiddenServiceDir /var/lib/tor/ssh/
+HiddenServiceVersion 3
+HiddenServicePort 22 127.0.0.1:22
+```
+
+Restart Tor and retrieve your SSH onion address:
+
+```bash
+sudo systemctl restart tor@default
+sleep 5
+
+# Get your SSH onion address
+SSH_ONION=$(sudo cat /var/lib/tor/ssh/hostname)
+echo "SSH Onion: $SSH_ONION"
+```
+
+**⚠️ CRITICAL: Save this address securely!** Without it, you cannot access your Pi remotely.
+
+```bash
+# Backup to a safe location (example: encrypted file)
+echo "$SSH_ONION" | gpg -c > ssh_onion_backup.gpg
+```
+
+---
+
+## B.4 Configure SSHD for Tor-Only Access
+
+### B.4.1 Bind SSH to localhost only
+
+Edit the SSH daemon configuration:
+
+```bash
+sudo nano /etc/ssh/sshd_config
+```
+
+Find and modify (or add) these lines:
+
+```bash
+# Bind ONLY to localhost - Tor will forward connections
+ListenAddress 127.0.0.1
+
+# Disable password authentication (key-only)
+PasswordAuthentication no
+PubkeyAuthentication yes
+
+# Harden against attacks
+PermitRootLogin no
+MaxAuthTries 3
+LoginGraceTime 30
+
+# Disable unnecessary features
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding no
+PermitTunnel no
+```
+
+> **Note:** `ListenAddress 127.0.0.1` is the key change. SSH will only accept connections from localhost, which means only Tor can reach it.
+
+### B.4.2 Ensure you have SSH keys set up
+
+Before restarting SSH, verify your public key is installed:
+
+```bash
+# Check authorized_keys exists
+cat ~/.ssh/authorized_keys
+```
+
+If empty or missing, add your public key now:
+
+```bash
+# On your ADMIN MACHINE, generate key if needed:
+ssh-keygen -t ed25519 -C "simplex-admin"
+
+# Copy public key to Pi (while you still have LAN access!)
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@raspberry-pi-ip
+```
+
+### B.4.3 Restart SSH
+
+```bash
+sudo systemctl restart sshd
+
+# Verify it's listening on localhost only
+sudo ss -lntp | grep sshd
+```
+
+Expected output:
+```
+LISTEN  127.0.0.1:22   users:(("sshd",pid=...))
+```
+
+If you see `0.0.0.0:22` or `*:22`, the config change didn't apply. Check `/etc/ssh/sshd_config` again.
+
+---
+
+## B.5 Update Firewall
+
+Update nftables to block all clearnet SSH:
+
+```bash
+sudo nano /etc/nftables.conf
+```
+
+Replace the entire file with:
+
+```bash
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+  chain input {
+    type filter hook input priority 0; policy drop;
+
+    # Loopback - required for Tor→SSH and Tor→SimpleX
+    iif lo accept
+    
+    # Established connections
+    ct state established,related accept
+
+    # BLOCK SSH from clearnet (Tor connects via loopback)
+    tcp dport 22 drop
+
+    # Block SimpleX ports from clearnet
+    tcp dport { 443, 5223-5232 } drop
+
+    # ICMP disabled for stealth (optional: uncomment to enable)
+    # ip protocol icmp accept
+  }
+
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain output {
+    type filter hook output priority 0; policy accept;
+  }
+}
+```
+
+Apply the firewall:
+
+```bash
+sudo nft -f /etc/nftables.conf
+sudo systemctl restart nftables
+```
+
+---
+
+## B.6 Client Configuration
+
+### B.6.1 Install Tor on Admin Machine
+
+**Debian/Ubuntu:**
+```bash
+sudo apt install tor torsocks
+sudo systemctl enable --now tor
+```
+
+**macOS:**
+```bash
+brew install tor torsocks
+brew services start tor
+```
+
+**Windows:**
+- Install [Tor Expert Bundle](https://www.torproject.org/download/tor/) or use WSL2
+
+### B.6.2 Connect via torsocks
+
+The simplest method:
+
+```bash
+SSH_ONION="your-ssh-onion-address.onion"
+torsocks ssh user@$SSH_ONION
+```
+
+### B.6.3 SSH Config (Recommended)
+
+Add to `~/.ssh/config` for convenience:
+
+```bash
+Host simplex-pi
+    HostName your-ssh-onion-address.onion
+    User pi
+    IdentityFile ~/.ssh/id_ed25519
+    ProxyCommand nc -X 5 -x 127.0.0.1:9050 %h %p
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    ConnectTimeout 120
+```
+
+Now connect with:
+
+```bash
+ssh simplex-pi
+```
+
+> **Note:** `ProxyCommand` uses netcat to route through Tor SOCKS proxy. This works on Linux/macOS. For Windows, use PuTTY with a SOCKS proxy configuration.
+
+---
+
+## B.7 Verify Tor-Only Access
+
+### Test 1: Clearnet SSH should fail
+
+From your admin machine, try connecting directly (without Tor):
+
+```bash
+# This should fail/timeout
+ssh user@raspberry-pi-lan-ip
+```
+
+If this works, your firewall or SSHD config is wrong.
+
+### Test 2: Tor SSH should work
+
+```bash
+# This should succeed
+torsocks ssh user@your-ssh-onion.onion
+```
+
+### Test 3: Check from the Pi
+
+```bash
+# Verify SSH is localhost-only
+sudo ss -lntp | grep :22
+
+# Should show:
+# LISTEN 127.0.0.1:22 ...
+```
+
+---
+
+## B.8 Emergency Recovery
+
+**"I locked myself out!"**
+
+If you lose Tor access, you need physical access to the Pi:
+
+1. Connect monitor + keyboard to Pi
+2. Login locally (local console still works)
+3. Fix configuration:
+   ```bash
+   # Temporarily allow LAN SSH
+   sudo sed -i 's/ListenAddress 127.0.0.1/ListenAddress 0.0.0.0/' /etc/ssh/sshd_config
+   sudo systemctl restart sshd
+   ```
+4. Fix your issue, then restore Tor-only config
+
+### Backup Your Onion Keys
+
+The SSH onion address is derived from keys in `/var/lib/tor/ssh/`. Back these up:
+
+```bash
+# On the Pi
+sudo tar -czf /tmp/tor-ssh-keys.tar.gz -C /var/lib/tor ssh/
+sudo chown $USER /tmp/tor-ssh-keys.tar.gz
+
+# Transfer to admin machine
+torsocks scp user@your-onion:/tmp/tor-ssh-keys.tar.gz ./
+
+# Encrypt and store securely
+gpg -c tor-ssh-keys.tar.gz
+```
+
+If you lose the SD card, you can restore these keys to get the same onion address.
+
+---
+
+## B.9 Performance Considerations
+
+SSH over Tor is slower than clearnet SSH due to:
+- 3-hop Tor circuit (6 relays round-trip)
+- Onion service rendezvous overhead
+- Tor network latency
+
+**Typical latencies:**
+- Clearnet SSH: 10-50ms
+- Tor SSH: 200-800ms
+
+**Tips for usability:**
+- Enable SSH compression: Add `Compression yes` to SSH config
+- Increase timeouts: `ServerAliveInterval 60` prevents disconnects
+- Use tmux/screen: Persistent sessions survive disconnects
+- Batch operations: Script repetitive tasks
+
+---
+
+## B.10 Security Notes
+
+### What This Provides
+
+✅ **No exposed ports** – SSH invisible on clearnet  
+✅ **Location anonymity** – Admin IP hidden from Pi  
+✅ **NAT traversal** – Works from any network  
+✅ **Consistent security model** – Everything via Tor  
+
+### What This Does NOT Provide
+
+❌ **Key compromise protection** – If your SSH key leaks, attacker can connect  
+❌ **Onion address secrecy** – If leaked, anyone with Tor can attempt connection  
+
+### Recommended Additional Hardening
+
+- **Appendix C** (Tor v3 Client Authorization) – Make onion invisible without auth key
+- Use hardware security key (FIDO2) for SSH authentication
+- Implement fail2ban (monitors auth failures even on localhost)
+
+---
+
+## B.11 Quick Reference
+
+```bash
+# Get SSH onion address
+sudo cat /var/lib/tor/ssh/hostname
+
+# Connect via Tor
+torsocks ssh user@your-ssh-onion.onion
+
+# Or with SSH config
+ssh simplex-pi
+
+# Check SSH is localhost-only
+sudo ss -lntp | grep :22
+
+# Restart SSH
+sudo systemctl restart sshd
+
+# Restart Tor
+sudo systemctl restart tor@default
+
+# Test Tor connectivity
+torsocks nc -zv your-ssh-onion.onion 22
+```
+
+---
+
+## B.12 Complete torrc Reference
+
+After completing Appendices A and B, your `/etc/tor/torrc` should contain:
+
+```bash
+# === SSH Administration ===
+HiddenServiceDir /var/lib/tor/ssh/
+HiddenServiceVersion 3
+HiddenServicePort 22 127.0.0.1:22
+
+# === SimpleX SMP (Original) ===
+HiddenServiceDir /var/lib/tor/simplex-smp/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5223
+
+# === SimpleX XFTP ===
+HiddenServiceDir /var/lib/tor/simplex-xftp/
+HiddenServiceVersion 3
+HiddenServicePort 443 127.0.0.1:443
+
+# === SimpleX SMP Multi-Instance (2-10) ===
+HiddenServiceDir /var/lib/tor/simplex-smp2/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5224
+
+HiddenServiceDir /var/lib/tor/simplex-smp3/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5225
+
+HiddenServiceDir /var/lib/tor/simplex-smp4/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5226
+
+HiddenServiceDir /var/lib/tor/simplex-smp5/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5227
+
+HiddenServiceDir /var/lib/tor/simplex-smp6/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5228
+
+HiddenServiceDir /var/lib/tor/simplex-smp7/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5229
+
+HiddenServiceDir /var/lib/tor/simplex-smp8/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5230
+
+HiddenServiceDir /var/lib/tor/simplex-smp9/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5231
+
+HiddenServiceDir /var/lib/tor/simplex-smp10/
+HiddenServiceVersion 3
+HiddenServicePort 5223 127.0.0.1:5232
+```
+
+Total: **12 hidden services** (1 SSH + 10 SMP + 1 XFTP)
 
 ---
 
@@ -1223,11 +1980,15 @@ sudo ss -lntp | grep smp-server | wc -l
 
 *Coming in v0.8*
 
+This will add an additional layer of protection: even if someone discovers your .onion address, they cannot connect without the correct authorization key.
+
 ---
 
 # Appendix D: Vanguards
 
 *Coming in v0.9*
+
+This will protect against guard discovery attacks that could be used to locate your hidden service.
 
 ---
 
@@ -1240,7 +2001,8 @@ This project is actively developed. The following features are planned:
 | Feature | Status | Description |
 |---------|--------|-------------|
 | **Multi-SMP Private Routing** | ✅ v0.6 | 10 SMP servers for traffic mixing |
-| **SSH over Tor** | 🔜 v0.7 | Admin access only via .onion |
+| **SSH over Tor** | ✅ v0.7 | Admin access only via .onion |
+| **Closed User Group Docs** | ✅ v0.7 | Documentation for isolated infrastructure |
 | **Tor v3 Client Authorization** | 🔜 v0.8 | Hidden services invisible without keys |
 | **Vanguards** | 🔜 v0.9 | Guard discovery protection |
 | **LUKS Full-Disk Encryption** | 📋 Planned | Protect data at rest |
@@ -1280,14 +2042,25 @@ This project is actively developed. The following features are planned:
 |---------|--------|-------------|
 | **Stress Testing Framework** | 📋 Planned | Load testing tools |
 | **Penetration Testing Guide** | 📋 Planned | Security audit checklist |
-| **Threat Model Documentation** | 📋 Planned | Detailed security analysis |
+| **Threat Model Documentation** | ✅ v0.7 | Detailed security analysis |
 
 ---
 
 ## Changelog
 
-### v0.6 (Current)
-- **ADDED:** Comprehensive introduction with use cases and threat model
+### v0.7 (Current)
+- **ADDED:** Closed User Group Architecture documentation
+- **ADDED:** Server configuration guide (Closed vs. Hybrid mode)
+- **ADDED:** Appendix B - SSH over Tor (Tor-only administration)
+- **ADDED:** Threat Model & Limitations section
+- **ADDED:** GitHub badges for project status
+- **ADDED:** Discovery problem explanation
+- **UPDATED:** Entire guide refocused on closed user group concept
+- **UPDATED:** Hidden Services count to 12 (added SSH)
+- **UPDATED:** Firewall configuration for Tor-only access
+
+### v0.6
+- **ADDED:** Comprehensive introduction with use cases
 - **ADDED:** SOCKS proxy configuration for Private Routing (CRITICAL fix)
 - **ADDED:** Roadmap section with future development plans
 - **FIXED:** Private Routing error "does not exist (Name or service not known)"
@@ -1335,4 +2108,6 @@ Found a bug? Have an improvement?
 
 ---
 
-(C) 2025 cannatoshi
+*Built with 🔐 by [cannatoshi](https://github.com/cannatoshi)*
+
+*"The best hiding place is one nobody knows exists."*
