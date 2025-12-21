@@ -15,9 +15,21 @@
 
 A battle-tested, reproducible guide to deploy your own **closed-system, high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
 
-> **Version:** 0.7.1-alpha (21. December 2025)  
+> **Version:** 0.7.2-alpha (21. December 2025)  
 > **Tested on:** Raspberry Pi 4 (4GB), Raspberry Pi OS Lite 64-bit (Bookworm)  
 > **SimpleX Version:** 6.4.5.1
+
+---
+
+## ⚠️ Known Issue: Tor Connectivity Fluctuations
+
+> **We're actively working on improving stability.** Running 12 Tor Hidden Services on a single device can occasionally experience connectivity fluctuations due to Tor network conditions (bad guard nodes, circuit timeouts). 
+>
+> **Mitigation:** We've added [Appendix E: Tor Watchdog](#appendix-e-tor-watchdog) which automatically monitors and restarts Tor when hidden services become unreachable. This significantly improves uptime.
+>
+> **Symptoms:** Clients showing 0% or partial server connectivity, messages not arriving intermittently.
+>
+> **We're investigating:** Vanguards integration, guard node optimization, and circuit stability improvements for future releases.
 
 ---
 
@@ -215,12 +227,12 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │              TOR DAEMON                                 │   │
+│   │              TOR DAEMON + WATCHDOG                      │   │
 │   │         (12 Hidden Services)                            │   │
 │   │                                                         │   │
 │   │   All services Tor-only, zero clearnet                  │   │
 │   │   v3 onion addresses (ed25519 crypto)                   │   │
-│   │   Addresses not discoverable by any scan                │   │
+│   │   Auto-recovery on connectivity issues                  │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -253,6 +265,7 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 | **Metadata** | Private routing, traffic mixing, no user IDs |
 | **Infrastructure** | Self-hosted, YOU are the only operator |
 | **Network** | Firewall blocks all clearnet access to services |
+| **Availability** | Tor Watchdog auto-recovers from connectivity issues |
 
 ### The Discovery Problem (Why Closed Systems Matter)
 
@@ -294,6 +307,7 @@ Traditional attacks on messaging require knowing **where** to look:
 | **Insider threat** | ⚠️ Limited | Group member can leak .onion addresses |
 | **Nation-state with Tor visibility** | ⚠️ Limited | Long-term traffic analysis possible |
 | **Endpoint compromise** | ❌ None | Client device hacked = game over |
+| **Tor network instability** | ⚠️ Mitigated | Watchdog helps, but outages possible |
 
 ### The Single-Operator Consideration
 
@@ -319,7 +333,7 @@ All 10 SMP servers run on **one device** under **one operator** (you). This mean
 | Threat Level | Recommended Setup | Example Users |
 |--------------|-------------------|---------------|
 | **Standard** | Closed Mode, single Pi | Families, small teams |
-| **Elevated** | Closed Mode + Appendix B-D | NGOs, journalists |
+| **Elevated** | Closed Mode + Appendix B-E | NGOs, journalists |
 | **High** | Multi-location + different operators | Activists in hostile states |
 | **Extreme** | Air-gapped + multi-jurisdiction + burner devices | Conflict zones, whistleblowers |
 
@@ -347,6 +361,7 @@ All 10 SMP servers run on **one device** under **one operator** (you). This mean
 - [Appendix B: SSH over Tor](#appendix-b-ssh-over-tor)
 - [Appendix C: Tor v3 Client Authorization](#appendix-c-tor-v3-client-authorization) *(coming soon)*
 - [Appendix D: Vanguards](#appendix-d-vanguards) *(coming soon)*
+- [Appendix E: Tor Watchdog](#appendix-e-tor-watchdog) ⭐ **NEW - Recommended!**
 
 ### Roadmap
 - [Future Development](#roadmap-future-development)
@@ -498,9 +513,9 @@ Download verified ARM64 binaries from our GitHub releases:
 
 ```bash
 # Download binaries
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/smp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/xftp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/SHA256SUMS
 
 # Verify checksums (IMPORTANT!)
 sha256sum -c SHA256SUMS
@@ -994,9 +1009,9 @@ sudo apt install binutils-gold
 ```bash
 # Re-download
 rm smp-server xftp-server SHA256SUMS
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/smp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/xftp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/SHA256SUMS
 
 # Verify again
 sha256sum -c SHA256SUMS
@@ -1135,6 +1150,66 @@ This allows messages to be delivered directly if Private Routing fails.
 
 ---
 
+### Tor Connectivity Issues: Clients showing 0% or intermittent connectivity
+
+**Symptoms:**
+- SimpleX clients show 0% or partial server connectivity
+- Connectivity fluctuates between 0% and 100%
+- Messages arrive with delays or not at all
+- Logs show: `Guard XYZ is failing more circuits than usual`
+
+**Cause:** Tor network instability. Running 12 Hidden Services creates many Tor circuits. If Tor gets assigned a bad guard node, circuits may fail repeatedly. Tor normally holds guard nodes for 2-3 months for security, which means a bad guard can cause prolonged issues.
+
+**Quick Fix (restart Tor):**
+```bash
+sudo systemctl restart tor@default
+```
+
+**If that doesn't help (reset Tor state):**
+```bash
+sudo systemctl stop tor@default
+sudo rm /var/lib/tor/state
+sudo systemctl start tor@default
+```
+
+> ⚠️ This forces Tor to pick new guard nodes. Use sparingly.
+
+**Permanent Fix:** Install the [Tor Watchdog](#appendix-e-tor-watchdog) - it automatically monitors and restarts Tor when Hidden Services become unreachable.
+
+**Check Tor status:**
+```bash
+# Is Tor running and bootstrapped?
+sudo journalctl -u tor@default --since "5 min ago" | grep -i bootstrap
+
+# Any circuit errors?
+sudo journalctl -u tor@default --since "10 min ago" | grep -iE "timeout|fail|circuit"
+```
+
+---
+
+### Client shows some servers at 0%, others at 100%
+
+**Cause:** Individual Hidden Service circuits may fail independently.
+
+**Fix:**
+```bash
+# Test each server individually
+for i in "" 2 3 4 5 6 7 8 9 10; do
+  if [ -z "$i" ]; then
+    ONION=$(sudo cat /var/lib/tor/simplex-smp/hostname)
+    NAME="SMP1"
+  else
+    ONION=$(sudo cat /var/lib/tor/simplex-smp$i/hostname)
+    NAME="SMP$i"
+  fi
+  timeout 30 torsocks nc -zv "$ONION" 5223 2>/dev/null && echo "✓ $NAME OK" || echo "✗ $NAME FAIL"
+done
+```
+
+If specific servers consistently fail, check their configs individually.
+
+---
+
 ## Quick reference commands
 
 ```bash
@@ -1144,12 +1219,19 @@ sudo systemctl restart tor@default smp-server xftp-server
 # View logs
 sudo journalctl -u smp-server -f
 sudo journalctl -u xftp-server -f
+sudo journalctl -u tor@default -f
 
 # Check ports
 sudo ss -lntp | grep -E ':(443|5223)'
 
 # Check SOCKS proxy config (should be in [PROXY] section!)
 sudo grep -A3 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
+
+# Check Tor status
+sudo journalctl -u tor@default --since "5 min ago" | grep -iE "bootstrap|circuit|guard"
+
+# Test Hidden Service connectivity
+torsocks nc -zv $(sudo cat /var/lib/tor/simplex-smp/hostname) 5223
 
 # Export addresses (KEEP THESE SECRET!)
 echo "SMP:  $(sudo cat /var/lib/tor/simplex-smp/hostname)"
@@ -2175,6 +2257,266 @@ This will protect against guard discovery attacks that could be used to locate y
 
 ---
 
+# Appendix E: Tor Watchdog
+
+> **Prerequisite:** Complete Sections 1-13 (Core Setup) first.  
+> **Difficulty:** Beginner  
+> **Time:** 5 minutes  
+> **Result:** Automatic recovery from Tor connectivity issues
+
+---
+
+## E.1 The Problem
+
+Running 12 Tor Hidden Services creates many Tor circuits. Occasionally, Tor may experience connectivity issues:
+
+- **Bad guard nodes** – Tor holds guard nodes for 2-3 months for security. If a guard becomes unreliable, you're stuck with it.
+- **Circuit timeouts** – Hidden service circuits may fail to build.
+- **Network conditions** – ISP issues, Tor network congestion.
+
+**Symptoms:**
+- Clients show 0% or partial server connectivity
+- Messages stop arriving
+- Logs show: `Guard XYZ is failing more circuits than usual`
+- Connectivity fluctuates randomly
+
+**The manual fix** is to restart Tor, but you can't do that if you're not monitoring 24/7.
+
+---
+
+## E.2 The Solution: Tor Watchdog
+
+A simple script that:
+1. Tests if your primary Hidden Service is reachable via Tor
+2. If unreachable, restarts Tor automatically
+3. Runs every 5 minutes via systemd timer
+4. Logs all restarts to syslog
+
+---
+
+## E.3 Installation
+
+### E.3.1 Create the watchdog script
+
+```bash
+sudo tee /usr/local/bin/tor-watchdog.sh > /dev/null <<'EOF'
+#!/bin/bash
+# Tor Hidden Service Watchdog
+# Checks if primary SMP server is reachable, restarts Tor if not
+
+ONION=$(cat /var/lib/tor/simplex-smp/hostname)
+
+if ! timeout 30 torsocks nc -z "$ONION" 5223 2>/dev/null; then
+    logger "Tor watchdog: Hidden service unreachable, restarting Tor"
+    systemctl restart tor@default
+fi
+EOF
+
+sudo chmod +x /usr/local/bin/tor-watchdog.sh
+```
+
+### E.3.2 Create systemd service
+
+```bash
+sudo tee /etc/systemd/system/tor-watchdog.service > /dev/null <<'EOF'
+[Unit]
+Description=Tor Hidden Service Watchdog
+After=tor@default.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tor-watchdog.sh
+EOF
+```
+
+### E.3.3 Create systemd timer
+
+```bash
+sudo tee /etc/systemd/system/tor-watchdog.timer > /dev/null <<'EOF'
+[Unit]
+Description=Run Tor Watchdog every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+EOF
+```
+
+### E.3.4 Enable and start
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now tor-watchdog.timer
+```
+
+---
+
+## E.4 Verification
+
+### Check timer status
+
+```bash
+sudo systemctl status tor-watchdog.timer --no-pager
+```
+
+Expected output:
+```
+● tor-watchdog.timer - Run Tor Watchdog every 5 minutes
+     Loaded: loaded (/etc/systemd/system/tor-watchdog.timer; enabled; ...)
+     Active: active (running) since ...
+```
+
+### Test manually
+
+```bash
+sudo /usr/local/bin/tor-watchdog.sh && echo "Watchdog OK"
+```
+
+### Check watchdog logs
+
+```bash
+sudo journalctl | grep "Tor watchdog"
+```
+
+If the watchdog has restarted Tor, you'll see:
+```
+Dec 21 20:30:15 simplex root: Tor watchdog: Hidden service unreachable, restarting Tor
+```
+
+---
+
+## E.5 How It Works
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    EVERY 5 MINUTES                             │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│   ┌──────────────┐                                             │
+│   │  Timer fires │                                             │
+│   └──────┬───────┘                                             │
+│          │                                                     │
+│          ▼                                                     │
+│   ┌──────────────────────────────────────┐                     │
+│   │  Test: Can we reach our own          │                     │
+│   │  Hidden Service via Tor?             │                     │
+│   │  torsocks nc -z $ONION 5223          │                     │
+│   └──────────────────┬───────────────────┘                     │
+│                      │                                         │
+│          ┌───────────┴───────────┐                             │
+│          │                       │                             │
+│          ▼                       ▼                             │
+│   ┌─────────────┐         ┌─────────────┐                      │
+│   │  SUCCESS    │         │  FAILURE    │                      │
+│   │  Do nothing │         │  Restart Tor│                      │
+│   │  (all good) │         │  Log event  │                      │
+│   └─────────────┘         └─────────────┘                      │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## E.6 Configuration Options
+
+### Change check interval
+
+Edit the timer to check more or less frequently:
+
+```bash
+sudo nano /etc/systemd/system/tor-watchdog.timer
+```
+
+Change `OnUnitActiveSec=5min` to desired interval (e.g., `3min`, `10min`).
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart tor-watchdog.timer
+```
+
+### Monitor multiple services
+
+Modify the script to check multiple Hidden Services:
+
+```bash
+sudo nano /usr/local/bin/tor-watchdog.sh
+```
+
+```bash
+#!/bin/bash
+# Enhanced Tor Watchdog - checks multiple services
+
+SERVICES=(
+    "simplex-smp:5223"
+    "simplex-xftp:443"
+)
+
+RESTART_NEEDED=false
+
+for SERVICE in "${SERVICES[@]}"; do
+    DIR=$(echo "$SERVICE" | cut -d: -f1)
+    PORT=$(echo "$SERVICE" | cut -d: -f2)
+    ONION=$(cat "/var/lib/tor/$DIR/hostname")
+    
+    if ! timeout 30 torsocks nc -z "$ONION" "$PORT" 2>/dev/null; then
+        logger "Tor watchdog: $DIR unreachable on port $PORT"
+        RESTART_NEEDED=true
+    fi
+done
+
+if [ "$RESTART_NEEDED" = true ]; then
+    logger "Tor watchdog: Restarting Tor due to unreachable services"
+    systemctl restart tor@default
+fi
+```
+
+---
+
+## E.7 Quick Reference
+
+```bash
+# Timer status
+sudo systemctl status tor-watchdog.timer
+
+# Manual test
+sudo /usr/local/bin/tor-watchdog.sh && echo "OK"
+
+# View watchdog logs
+sudo journalctl | grep "Tor watchdog"
+
+# Stop watchdog
+sudo systemctl stop tor-watchdog.timer
+
+# Restart watchdog
+sudo systemctl restart tor-watchdog.timer
+
+# Disable watchdog
+sudo systemctl disable tor-watchdog.timer
+```
+
+---
+
+## E.8 Limitations
+
+The watchdog is a **mitigation**, not a cure:
+
+- ✅ Handles temporary Tor network issues
+- ✅ Recovers from bad guard node selection
+- ✅ Works unattended 24/7
+- ❌ Cannot fix underlying network problems
+- ❌ Cannot fix misconfigured torrc
+- ❌ Frequent restarts may indicate deeper issues
+
+If the watchdog restarts Tor more than a few times per day, investigate:
+- Internet connection stability
+- Router/firewall issues (especially with IPS/IDS)
+- Tor configuration problems
+
+---
+
 # Roadmap: Future Development
 
 This project is actively developed. The following features are planned:
@@ -2188,6 +2530,7 @@ This project is actively developed. The following features are planned:
 | **Pre-built ARM64 Binaries** | ✅ v0.7 | Skip 60min compile time |
 | **Closed User Group Docs** | ✅ v0.7 | Documentation for isolated infrastructure |
 | **SOCKS Proxy Fix** | ✅ v0.7.1 | Correct [PROXY] section configuration |
+| **Tor Watchdog** | ✅ v0.7.2 | Auto-recovery from connectivity issues |
 | **Tor v3 Client Authorization** | 🔜 v0.8 | Hidden services invisible without keys |
 | **Vanguards** | 🔜 v0.9 | Guard discovery protection |
 | **LUKS Full-Disk Encryption** | 📋 Planned | Protect data at rest |
@@ -2206,6 +2549,7 @@ This project is actively developed. The following features are planned:
 
 | Feature | Status | Description |
 |---------|--------|-------------|
+| **Tor Watchdog** | ✅ v0.7.2 | Automatic Tor restart on issues |
 | **Prometheus Metrics** | 📋 Planned | Server statistics export |
 | **Grafana Dashboards** | 📋 Planned | Visual monitoring |
 | **Web UI** | 📋 Planned | Browser-based admin panel |
@@ -2233,7 +2577,17 @@ This project is actively developed. The following features are planned:
 
 ## Changelog
 
-### v0.7.1-alpha (Current)
+### v0.7.2-alpha (Current)
+- **ADDED:** Appendix E - Tor Watchdog (automatic recovery from connectivity issues)
+- **ADDED:** Known Issue banner about Tor connectivity fluctuations
+- **ADDED:** Troubleshooting section for Tor connectivity issues (guard nodes, circuit timeouts)
+- **ADDED:** Troubleshooting for partial server connectivity
+- **UPDATED:** Security Model table with Availability row
+- **UPDATED:** Threat Model with Tor network instability consideration
+- **UPDATED:** Table of Contents with Appendix E
+- **UPDATED:** Roadmap with Tor Watchdog status
+
+### v0.7.1-alpha
 - **FIXED:** CRITICAL - SOCKS proxy must be in `[PROXY]` section, NOT `[TRANSPORT]`
 - **FIXED:** Private Message Routing now works correctly with Tor-only servers
 - **UPDATED:** Section 7.1 with correct SOCKS proxy configuration
