@@ -15,7 +15,7 @@
 
 A battle-tested, reproducible guide to deploy your own **closed-system, high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
 
-> **Version:** 0.7.0-alpha (21. December 2025)  
+> **Version:** 0.7.1-alpha (21. December 2025)  
 > **Tested on:** Raspberry Pi 4 (4GB), Raspberry Pi OS Lite 64-bit (Bookworm)  
 > **SimpleX Version:** 6.4.5.1
 
@@ -193,37 +193,37 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 ## What You Will Build
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    YOUR RASPBERRY PI                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              10 × SMP SERVERS                       │   │
-│   │         (Private Message Routing Pool)              │   │
-│   │                                                     │   │
-│   │   Each server = unique .onion address               │   │
-│   │   Addresses known ONLY to your group                │   │
-│   │   Traffic distributed across all instances          │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              1 × XFTP SERVER                        │   │
-│   │         (Encrypted File Transfer)                   │   │
-│   │                                                     │   │
-│   │   20GB storage, files auto-expire                   │   │
-│   │   Chunked, encrypted uploads/downloads              │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│   ┌─────────────────────────────────────────────────────┐   │
-│   │              TOR DAEMON                             │   │
-│   │         (12 Hidden Services)                        │   │
-│   │                                                     │   │
-│   │   All services Tor-only, zero clearnet              │   │
-│   │   v3 onion addresses (ed25519 crypto)               │   │
-│   │   Addresses not discoverable by any scan            │   │
-│   └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    YOUR RASPBERRY PI                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │              10 × SMP SERVERS                           │   │
+│   │         (Private Message Routing Pool)                  │   │
+│   │                                                         │   │
+│   │   Each server = unique .onion address                   │   │
+│   │   Addresses known ONLY to your group                    │   │
+│   │   Traffic distributed across all instances              │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │              1 × XFTP SERVER                            │   │
+│   │         (Encrypted File Transfer)                       │   │
+│   │                                                         │   │
+│   │   20GB storage, files auto-expire                       │   │
+│   │   Chunked, encrypted uploads/downloads                  │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │              TOR DAEMON                                 │   │
+│   │         (12 Hidden Services)                            │   │
+│   │                                                         │   │
+│   │   All services Tor-only, zero clearnet                  │   │
+│   │   v3 onion addresses (ed25519 crypto)                   │   │
+│   │   Addresses not discoverable by any scan                │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
                     ┌─────────────────┐
@@ -498,9 +498,9 @@ Download verified ARM64 binaries from our GitHub releases:
 
 ```bash
 # Download binaries
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/smp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/xftp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/SHA256SUMS
 
 # Verify checksums (IMPORTANT!)
 sha256sum -c SHA256SUMS
@@ -611,47 +611,79 @@ SMP_ONION=$(sudo cat /var/lib/tor/simplex-smp/hostname)
 sudo -u simplex smp-server init -n "$SMP_ONION"
 ```
 
-### 7.1 Configure SMP
+### 7.1 Configure SMP for Private Routing (CRITICAL!)
+
+> **⚠️ IMPORTANT:** The SOCKS proxy configuration for Private Message Routing **MUST** be in the `[PROXY]` section, NOT in `[TRANSPORT]`! This is a common mistake that breaks Private Routing.
 
 ```bash
 sudo nano /etc/opt/simplex/smp-server.ini
 ```
 
-**Required changes:**
+**Required changes in `[TRANSPORT]` section:**
 
 ```ini
 [TRANSPORT]
 host: <your-smp-onion>.onion
 port: 5223
-socks_proxy: 127.0.0.1:9050
+log_tls_errors: off
 ```
 
-> **CRITICAL:** The `socks_proxy` setting is required for Private Message Routing. Without it, servers cannot forward messages to other .onion servers.
+**Required changes in `[PROXY]` section (CRITICAL for Private Routing!):**
 
-> **Use only ONE port (5223).** Multiple ports like `5223,443` cause client link format issues.
+Find the `[PROXY]` section and configure:
+
+```ini
+[PROXY]
+# SOCKS proxy for forwarding messages to destination servers
+# MUST use IP address, not "localhost"!
+socks_proxy: 127.0.0.1:9050
+
+# For Tor-only .onion servers, use 'onion' mode
+# 'onion' = SOCKS only for .onion destinations (default)
+# 'always' = SOCKS for all destinations
+socks_mode: onion
+```
 
 **Disable HTTPS web server** (find `[WEB]` section):
 
 ```ini
 [WEB]
 static_path: /var/opt/simplex/www
-# https: 442
+# https: 443
 # cert: /etc/opt/simplex/web.crt
 # key: /etc/opt/simplex/web.key
 ```
 
-Or use sed:
+Or use these sed commands to automate:
 
 ```bash
-# Disable HTTPS (handles both "https: on" and "https: 443" formats)
+# Set correct port
+sudo sed -i 's/^port: .*/port: 5223/' /etc/opt/simplex/smp-server.ini
+
+# Disable HTTPS
 sudo sed -i 's/^https:.*/# &/' /etc/opt/simplex/smp-server.ini
 sudo sed -i 's/^cert:/# cert:/' /etc/opt/simplex/smp-server.ini
 sudo sed -i 's/^key:/# key:/' /etc/opt/simplex/smp-server.ini
-sudo sed -i 's/^port: .*/port: 5223/' /etc/opt/simplex/smp-server.ini
 
-# Enable SOCKS proxy for Tor (CRITICAL for Private Routing)
-grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
-  sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
+# CRITICAL: Configure SOCKS proxy in [PROXY] section for Private Routing
+# First, remove any existing socks_proxy entries (might be in wrong section)
+sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex/smp-server.ini
+
+# Add socks_proxy and socks_mode in [PROXY] section
+sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex/smp-server.ini
+```
+
+**Verify the configuration:**
+
+```bash
+sudo grep -A5 "\[PROXY\]" /etc/opt/simplex/smp-server.ini | head -10
+```
+
+Expected output:
+```
+[PROXY]
+socks_proxy: 127.0.0.1:9050
+socks_mode: onion
 ```
 
 ### 7.2 Fix permissions
@@ -920,7 +952,19 @@ Your server list should show:
 - ❌ SimpleX Chat servers: Disabled
 - ❌ Flux servers: Disabled
 
-### 12.3 Distribute to Group Members
+### 12.3 Configure Private Message Routing
+
+For maximum privacy with your closed infrastructure:
+
+```
+Settings → Network & Servers → Private Message Routing:
+  → Private routing: Always
+  → Allow downgrade: No
+```
+
+> **Note:** "Allow downgrade: No" is recommended for closed groups where all servers are under your control and properly configured.
+
+### 12.4 Distribute to Group Members
 
 Share server addresses **securely** with your group:
 - In person (QR code scan)
@@ -950,9 +994,9 @@ sudo apt install binutils-gold
 ```bash
 # Re-download
 rm smp-server xftp-server SHA256SUMS
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/smp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/xftp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.1-alpha/SHA256SUMS
 
 # Verify again
 sha256sum -c SHA256SUMS
@@ -1038,24 +1082,56 @@ sudo chown -R simplex:simplex /var/opt/simplex-xftp
 
 ### Private Routing Error: `does not exist (Name or service not known)`
 
-**Cause:** SMP servers cannot resolve .onion addresses for forwarding because SOCKS proxy is not configured.
+**Cause:** SMP servers cannot resolve .onion addresses for forwarding. This happens when:
+1. `socks_proxy` is in the wrong section (`[TRANSPORT]` instead of `[PROXY]`)
+2. `socks_proxy` is missing entirely
+3. Using `localhost` instead of `127.0.0.1`
 
 **Symptom in logs:**
 ```
 Error connecting: xxx.onion PCENetworkError (NEConnectError {connectError = "...does not exist (Name or service not known)"})
 ```
 
-**Fix:** Enable SOCKS proxy for all SMP servers:
+**Fix:** Configure SOCKS proxy correctly in the `[PROXY]` section:
+
 ```bash
-# Add to [TRANSPORT] section in smp-server.ini
-socks_proxy: 127.0.0.1:9050
+# Remove any existing socks_proxy entries (might be in wrong section)
+sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex/smp-server.ini
 
-# Or use sed:
-grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
-  sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
+# Add correct configuration in [PROXY] section
+sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex/smp-server.ini
 
+# Restart server
 sudo systemctl restart smp-server
 ```
+
+**Verify:**
+```bash
+sudo grep -A3 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
+```
+
+Should show:
+```
+[PROXY]
+socks_proxy: 127.0.0.1:9050
+socks_mode: onion
+```
+
+---
+
+### Private Routing Error on Client: "Error connecting to forwarding server"
+
+**Cause:** Server-side SOCKS proxy misconfiguration.
+
+**Quick Client Workaround (temporary):**
+```
+Settings → Network & Servers → Private Message Routing:
+  → Allow downgrade: Yes
+```
+
+This allows messages to be delivered directly if Private Routing fails.
+
+**Permanent Fix:** Fix server configuration as described above, then set `Allow downgrade: No` again.
 
 ---
 
@@ -1071,6 +1147,9 @@ sudo journalctl -u xftp-server -f
 
 # Check ports
 sudo ss -lntp | grep -E ':(443|5223)'
+
+# Check SOCKS proxy config (should be in [PROXY] section!)
+sudo grep -A3 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
 
 # Export addresses (KEEP THESE SECRET!)
 echo "SMP:  $(sudo cat /var/lib/tor/simplex-smp/hostname)"
@@ -1310,7 +1389,9 @@ sudo mv /var/opt/simplex-backup /var/opt/simplex 2>/dev/null || true
 
 ---
 
-## A.7 Configure Ports, HTTPS, and SOCKS Proxy
+## A.7 Configure Ports and SOCKS Proxy (CRITICAL!)
+
+> **⚠️ CRITICAL:** The SOCKS proxy configuration **MUST** be in the `[PROXY]` section for Private Message Routing to work! Placing it in `[TRANSPORT]` will NOT work.
 
 ```bash
 # Configure all instances
@@ -1318,32 +1399,43 @@ for i in 2 3 4 5 6 7 8 9 10; do
   PORT=$((5222 + i))  # 5224, 5225, 5226, etc.
   echo "Configuring SMP$i on port $PORT"
   
-  # Set port
+  # Set port in [TRANSPORT]
   sudo sed -i "s/^port: .*/port: $PORT/" /etc/opt/simplex-smp$i/smp-server.ini
   
   # Disable HTTPS
   sudo sed -i 's/^https:.*/# &/' /etc/opt/simplex-smp$i/smp-server.ini
   
-  # Enable SOCKS proxy (CRITICAL for Private Routing!)
-  grep -q "^socks_proxy:" /etc/opt/simplex-smp$i/smp-server.ini || \
-    sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex-smp$i/smp-server.ini
+  # CRITICAL: Remove any existing socks_proxy entries (might be in wrong section)
+  sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex-smp$i/smp-server.ini
+  
+  # CRITICAL: Add SOCKS proxy in [PROXY] section (NOT [TRANSPORT]!)
+  sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex-smp$i/smp-server.ini
 done
 
-# Also ensure original server has SOCKS proxy
-grep -q "^socks_proxy:" /etc/opt/simplex/smp-server.ini || \
-  sudo sed -i '/^\[TRANSPORT\]/a socks_proxy: 127.0.0.1:9050' /etc/opt/simplex/smp-server.ini
-
-# Verify
-echo "=== PORTS ==="
-grep "^port:" /etc/opt/simplex/smp-server.ini
-grep "^port:" /etc/opt/simplex-smp{2,3,4,5,6,7,8,9,10}/smp-server.ini
-
-echo "=== SOCKS PROXY ==="
-grep "socks_proxy" /etc/opt/simplex/smp-server.ini
-grep "socks_proxy" /etc/opt/simplex-smp{2,3,4,5,6,7,8,9,10}/smp-server.ini
+# Also fix the original server if not already done
+sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex/smp-server.ini
+sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex/smp-server.ini
 ```
 
-Expected: Ports 5223-5232, all with `socks_proxy: 127.0.0.1:9050`.
+**Verify the configuration is correct:**
+
+```bash
+echo "=== VERIFYING [PROXY] SECTION CONFIG ==="
+echo "Original server:"
+sudo grep -A3 "\[PROXY\]" /etc/opt/simplex/smp-server.ini | head -5
+
+for i in 2 3 4 5 6 7 8 9 10; do
+  echo "SMP$i:"
+  sudo grep -A3 "\[PROXY\]" /etc/opt/simplex-smp$i/smp-server.ini | head -5
+done
+```
+
+**Expected output for each server:**
+```
+[PROXY]
+socks_proxy: 127.0.0.1:9050
+socks_mode: onion
+```
 
 ---
 
@@ -1395,7 +1487,7 @@ sudo systemctl enable smp-server@{2,3,4,5,6,7,8,9,10}
 # Start all instances
 sudo systemctl start smp-server@{2,3,4,5,6,7,8,9,10}
 
-# Restart original to pick up SOCKS proxy config
+# Restart original to pick up any config changes
 sudo systemctl restart smp-server
 
 # Check status
@@ -1433,6 +1525,15 @@ done
 ```
 
 All 10 should succeed.
+
+### Verify Private Routing works (check logs for errors):
+
+```bash
+# Wait 30 seconds, then check for SOCKS/routing errors
+sleep 30 && sudo journalctl -u 'smp-server*' --since "1 min ago" | grep -iE "(error|fail)" | tail -10
+```
+
+If there are no errors (empty output), Private Routing is working correctly!
 
 ---
 
@@ -1529,6 +1630,15 @@ sudo ss -lntp | grep smp-server
 
 # Count running instances
 sudo ss -lntp | grep smp-server | wc -l
+
+# Verify SOCKS config in [PROXY] section (CRITICAL!)
+for i in "" 2 3 4 5 6 7 8 9 10; do
+  if [ -z "$i" ]; then
+    echo "=== Original ===" && sudo grep -A3 "\[PROXY\]" /etc/opt/simplex/smp-server.ini | head -5
+  else
+    echo "=== SMP$i ===" && sudo grep -A3 "\[PROXY\]" /etc/opt/simplex-smp$i/smp-server.ini | head -5
+  fi
+done
 
 # Export all addresses (KEEP SECRET!)
 echo "=== ALL SERVER ADDRESSES ==="
@@ -2077,6 +2187,7 @@ This project is actively developed. The following features are planned:
 | **SSH over Tor** | ✅ v0.7 | Admin access only via .onion |
 | **Pre-built ARM64 Binaries** | ✅ v0.7 | Skip 60min compile time |
 | **Closed User Group Docs** | ✅ v0.7 | Documentation for isolated infrastructure |
+| **SOCKS Proxy Fix** | ✅ v0.7.1 | Correct [PROXY] section configuration |
 | **Tor v3 Client Authorization** | 🔜 v0.8 | Hidden services invisible without keys |
 | **Vanguards** | 🔜 v0.9 | Guard discovery protection |
 | **LUKS Full-Disk Encryption** | 📋 Planned | Protect data at rest |
@@ -2122,7 +2233,16 @@ This project is actively developed. The following features are planned:
 
 ## Changelog
 
-### v0.7.0-alpha (Current)
+### v0.7.1-alpha (Current)
+- **FIXED:** CRITICAL - SOCKS proxy must be in `[PROXY]` section, NOT `[TRANSPORT]`
+- **FIXED:** Private Message Routing now works correctly with Tor-only servers
+- **UPDATED:** Section 7.1 with correct SOCKS proxy configuration
+- **UPDATED:** Appendix A.7 with correct Multi-SMP SOCKS configuration
+- **UPDATED:** Troubleshooting section with detailed Private Routing error fixes
+- **ADDED:** Client-side Private Routing configuration instructions (Section 12.3)
+- **ADDED:** Verification commands to check `[PROXY]` section configuration
+
+### v0.7.0-alpha
 - **ADDED:** Pre-built ARM64 binaries (Option A in Section 6)
 - **ADDED:** SHA256 checksum verification
 - **ADDED:** Closed User Group Architecture documentation
@@ -2139,9 +2259,8 @@ This project is actively developed. The following features are planned:
 
 ### v0.6
 - **ADDED:** Comprehensive introduction with use cases
-- **ADDED:** SOCKS proxy configuration for Private Routing (CRITICAL fix)
+- **ADDED:** SOCKS proxy configuration for Private Routing
 - **ADDED:** Roadmap section with future development plans
-- **FIXED:** Private Routing error "does not exist (Name or service not known)"
 - **IMPROVED:** Troubleshooting section with Private Routing errors
 
 ### v0.5
