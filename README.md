@@ -2,7 +2,7 @@
 
 ## Tor-Only Closed User Group Messaging with Multi-Instance Private Routing
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%204-c51a4a.svg)](https://www.raspberrypi.com/)
 [![Tor v3](https://img.shields.io/badge/Tor-v3%20Onion-7D4698.svg)](https://www.torproject.org/)
 [![SimpleX](https://img.shields.io/badge/SimpleX-6.4.5.1-1a73e8.svg)](https://simplex.chat/)
@@ -10,12 +10,12 @@
 [![Infrastructure](https://img.shields.io/badge/Infrastructure-Closed%20System-critical.svg)](#closed-user-group-architecture)
 [![Self-Hosted](https://img.shields.io/badge/Self--Hosted-100%25-success.svg)](#about-this-project)
 [![No Tracking](https://img.shields.io/badge/Tracking-None-brightgreen.svg)](#security-model)
-[![Maintenance](https://img.shields.io/badge/Maintained-Actively-success.svg)](https://github.com/cannatoshi/simplex-smb-xftp-via-tor-on-rpi-hardened/commits/main)
+[![Maintenance](https://img.shields.io/badge/Maintained-Actively-success.svg)](https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/commits/main)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen.svg)](#contributing)
 
 A battle-tested, reproducible guide to deploy your own **closed-system, high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
 
-> **Version:** 0.7 (20. December 2025)  
+> **Version:** 0.7.0-alpha (21. December 2025)  
 > **Tested on:** Raspberry Pi 4 (4GB), Raspberry Pi OS Lite 64-bit (Bookworm)  
 > **SimpleX Version:** 6.4.5.1
 
@@ -333,7 +333,7 @@ All 10 SMP servers run on **one device** under **one operator** (you). This mean
 3. [Create SimpleX service user](#3-create-simplex-service-user)
 4. [Install Tor](#4-install-tor)
 5. [Configure Tor hidden services](#5-configure-tor-hidden-services)
-6. [Build SimpleX from source](#6-build-simplex-from-source)
+6. [Install SimpleX binaries](#6-install-simplex-binaries)
 7. [Initialize SMP server](#7-initialize-smp-server)
 8. [Initialize XFTP server](#8-initialize-xftp-server)
 9. [Create systemd services](#9-create-systemd-services)
@@ -366,7 +366,7 @@ sudo reboot
 
 ## 2. Install dependencies
 
-> **CRITICAL:** This includes `binutils-gold` which is required for the Haskell build.
+> **CRITICAL:** This includes `binutils-gold` which is required for the Haskell build (Option B).
 
 ```bash
 sudo apt update
@@ -379,7 +379,7 @@ sudo apt install -y \
   nftables torsocks \
   binutils binutils-gold
 
-# Verify gold linker is available
+# Verify gold linker is available (needed for Option B)
 command -v ld.gold && ld.gold -v
 ```
 
@@ -481,9 +481,62 @@ These .onion addresses are the **only way** to reach your infrastructure. They s
 
 ---
 
-## 6. Build SimpleX from source
+## 6. Install SimpleX Binaries
 
-### 6.1 Install GHCup
+You have **two options** to get the SimpleX server binaries:
+
+| Option | Time | Skill Level | Recommended For |
+|--------|------|-------------|-----------------|
+| **A) Pre-built binaries** | ~2 minutes | Beginner | Most users |
+| **B) Build from source** | ~60 minutes | Intermediate | Security auditors, custom builds |
+
+---
+
+### Option A: Download Pre-built Binaries (Recommended)
+
+Download verified ARM64 binaries from our GitHub releases:
+
+```bash
+# Download binaries
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/SHA256SUMS
+
+# Verify checksums (IMPORTANT!)
+sha256sum -c SHA256SUMS
+```
+
+Expected output:
+```
+smp-server: OK
+xftp-server: OK
+```
+
+> **⚠️ If verification fails, DO NOT USE the binaries!** Re-download or build from source.
+
+Install the binaries:
+
+```bash
+# Install to system path
+sudo install -m 0755 smp-server /usr/local/bin/smp-server
+sudo install -m 0755 xftp-server /usr/local/bin/xftp-server
+
+# Verify installation
+smp-server -v
+xftp-server -v
+```
+
+Expected output: `SMP server v6.4.5.1` and `XFTP server v6.4.5.1`
+
+**Done!** Skip to [Section 7: Initialize SMP server](#7-initialize-smp-server).
+
+---
+
+### Option B: Build from Source
+
+For those who want to verify the source code or make custom modifications.
+
+#### 6.B.1 Install GHCup
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
@@ -502,7 +555,7 @@ Load environment:
 source ~/.ghcup/env
 ```
 
-### 6.2 Install GHC and Cabal
+#### 6.B.2 Install GHC and Cabal
 
 ```bash
 ghcup install ghc 9.6.3
@@ -518,7 +571,7 @@ cabal --version
 
 > **Ignore warnings** about newer versions. We use tested versions.
 
-### 6.3 Build SimpleX
+#### 6.B.3 Build SimpleX
 
 ```bash
 cd ~
@@ -536,7 +589,7 @@ cabal build exe:smp-server exe:xftp-server
 
 > **This takes 45-60 minutes on a Pi 4.** Go get coffee. ☕
 
-### 6.4 Install binaries
+#### 6.B.4 Install binaries
 
 ```bash
 sudo install -m 0755 "$(cabal list-bin exe:smp-server)" /usr/local/bin/smp-server
@@ -886,6 +939,26 @@ Share server addresses **securely** with your group:
 ```bash
 sudo apt install binutils-gold
 ```
+
+---
+
+### Checksum verification failed
+
+**Cause:** Download corrupted or tampered with.
+
+**Fix:**
+```bash
+# Re-download
+rm smp-server xftp-server SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.0-alpha/SHA256SUMS
+
+# Verify again
+sha256sum -c SHA256SUMS
+```
+
+If still failing, build from source (Option B) or report an issue on GitHub.
 
 ---
 
@@ -2002,6 +2075,7 @@ This project is actively developed. The following features are planned:
 |---------|--------|-------------|
 | **Multi-SMP Private Routing** | ✅ v0.6 | 10 SMP servers for traffic mixing |
 | **SSH over Tor** | ✅ v0.7 | Admin access only via .onion |
+| **Pre-built ARM64 Binaries** | ✅ v0.7 | Skip 60min compile time |
 | **Closed User Group Docs** | ✅ v0.7 | Documentation for isolated infrastructure |
 | **Tor v3 Client Authorization** | 🔜 v0.8 | Hidden services invisible without keys |
 | **Vanguards** | 🔜 v0.9 | Guard discovery protection |
@@ -2031,7 +2105,7 @@ This project is actively developed. The following features are planned:
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| **Pre-built ARM64 Binaries** | 📋 Planned | Skip 60min build time |
+| **Pre-built ARM64 Binaries** | ✅ v0.7 | Skip 60min build time |
 | **GPG Signed Releases** | 📋 Planned | Verify authenticity |
 | **Docker Images** | 📋 Planned | Container deployment |
 | **Ansible Playbooks** | 📋 Planned | Automated setup |
@@ -2048,16 +2122,20 @@ This project is actively developed. The following features are planned:
 
 ## Changelog
 
-### v0.7 (Current)
+### v0.7.0-alpha (Current)
+- **ADDED:** Pre-built ARM64 binaries (Option A in Section 6)
+- **ADDED:** SHA256 checksum verification
 - **ADDED:** Closed User Group Architecture documentation
 - **ADDED:** Server configuration guide (Closed vs. Hybrid mode)
 - **ADDED:** Appendix B - SSH over Tor (Tor-only administration)
 - **ADDED:** Threat Model & Limitations section
 - **ADDED:** GitHub badges for project status
 - **ADDED:** Discovery problem explanation
+- **UPDATED:** Section 6 restructured with two installation options
 - **UPDATED:** Entire guide refocused on closed user group concept
 - **UPDATED:** Hidden Services count to 12 (added SSH)
 - **UPDATED:** Firewall configuration for Tor-only access
+- **UPDATED:** Troubleshooting with checksum verification errors
 
 ### v0.6
 - **ADDED:** Comprehensive introduction with use cases
@@ -2092,9 +2170,11 @@ This project is actively developed. The following features are planned:
 
 ## License
 
-This guide is released under **MIT**.
+This guide is released under **AGPL-3.0**.
 
 SimpleX software is licensed under **AGPL-3.0**.
+
+Pre-built binaries are unmodified builds from [simplex-chat/simplexmq](https://github.com/simplex-chat/simplexmq).
 
 ---
 
