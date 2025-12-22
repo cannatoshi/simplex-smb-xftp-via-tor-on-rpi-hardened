@@ -27,7 +27,7 @@ A battle-tested, reproducible guide to deploy your own **closed-system, high-sec
 > **Recommendation:** Start with 1-3 SMP servers for production use.
 > We are actively working on improving Multi-SMP stability.
 >
-> ➡️ **CRITICAL:** See [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing) - Required for Private Message Routing!
+> ✅ **Dual Tor Architecture** is now part of the Core Setup (Section 4).
 
 ---
 
@@ -39,7 +39,7 @@ A battle-tested, reproducible guide to deploy your own **closed-system, high-sec
 > - Guard node changes
 >
 > The [Tor Watchdog](#appendix-e-tor-watchdog) automatically handles recovery.
-> For persistent issues, see [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing).
+> For persistent issues, verify your Dual Tor setup (Section 4) and see [Appendix F](#appendix-f-dual-tor-architecture-reference--troubleshooting) for troubleshooting.
 
 ---
 
@@ -385,7 +385,7 @@ All 10 SMP servers run on **one device** under **one operator** (you). This mean
 - [Appendix C: Tor v3 Client Authorization](#appendix-c-tor-v3-client-authorization) *(coming soon)*
 - [Appendix D: Vanguards](#appendix-d-vanguards) *(coming soon)*
 - [Appendix E: Tor Watchdog](#appendix-e-tor-watchdog) ⭐ **Recommended!**
-- [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing) ⭐ **NEW - CRITICAL for Private Routing!**
+- [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-reference--troubleshooting) *(Reference & Troubleshooting)*
 
 ### Roadmap
 - [Future Development](#roadmap-future-development)
@@ -453,7 +453,15 @@ sudo chmod 750 /var/opt/simplex-xftp/files
 
 ---
 
-## 4. Install Tor
+## 4. Install Tor (Dual Tor Architecture)
+
+> ⚠️ **CRITICAL: This setup uses TWO Tor instances!**
+> - `tor@default` → Hidden Services only (no SOCKS)
+> - `tor@tor2` → SOCKS Proxy only (for Private Routing)
+>
+> This separation is **required** for stable Private Message Routing. See [Appendix F](#appendix-f-dual-tor-architecture-reference--troubleshooting) for background and troubleshooting.
+
+### 4.1 Install Tor from Official Repository
 
 ```bash
 # Add Tor Project repository
@@ -466,27 +474,82 @@ echo "deb [signed-by=/usr/share/keyrings/tor-archive-keyring.gpg] https://deb.to
 
 sudo apt update
 sudo apt install -y tor deb.torproject.org-keyring
-
-sudo systemctl enable --now tor@default
 ```
 
-> 💡 **Note:** This installs the default Tor instance (`tor@default`).
-> For Private Message Routing, you'll also need a second Tor instance (`tor@tor2`) for SOCKS proxy.
-> See [Appendix F](#appendix-f-dual-tor-architecture-critical-for-private-routing) for the complete Dual Tor setup.
+### 4.2 Create Second Tor Instance (tor@tor2)
+
+```bash
+# Create the second Tor instance for SOCKS proxy
+sudo tor-instance-create tor2
+
+# Configure tor@tor2 for SOCKS only
+sudo tee /etc/tor/instances/tor2/torrc > /dev/null <<'EOF'
+# SOCKS Proxy for SMP Private Routing
+# This instance handles ONLY outbound SOCKS connections
+Log notice syslog
+SocksPort 9050
+EOF
+```
+
+### 4.3 Enable and Start Both Instances
+
+```bash
+# Enable both Tor instances
+sudo systemctl enable tor@default
+sudo systemctl enable tor@tor2
+
+# Start both Tor instances
+sudo systemctl start tor@default
+sudo systemctl start tor@tor2
+
+# Verify both are running
+sudo systemctl is-active tor@default tor@tor2
+```
+
+Expected output:
+```
+active
+active
+```
+
+### 4.4 Verify Dual Tor Architecture
+
+```bash
+# Check tor@tor2 is providing SOCKS on port 9050
+sudo ss -lntp | grep 9050
+
+# Test SOCKS proxy functionality
+curl -x socks5h://127.0.0.1:9050 -s https://check.torproject.org/api/ip | jq
+```
+
+Expected output for `ss`:
+```
+LISTEN  127.0.0.1:9050  users:(("tor",pid=...,fd=...))
+```
+
+> 💡 **Why Two Tor Instances?**
+> Running Hidden Services AND SOCKS proxy in a single Tor instance causes resource conflicts, resulting in `SocksErrorGeneralServerFailure` errors.
+> By separating them, each instance can dedicate resources to its specific task.
 
 ---
 
 ## 5. Configure Tor hidden services
 
+Now configure `tor@default` for Hidden Services only (SOCKS is handled by `tor@tor2`):
+
 ```bash
 sudo nano /etc/tor/torrc
 ```
 
-Add at the end:
+**Replace the entire file with:**
 
 ```bash
-# Disable SOCKS in this instance - we use tor@tor2 for SOCKS proxy
-# This prevents resource conflicts between Hidden Services and SOCKS
+# === tor@default Configuration ===
+# This instance handles ONLY Hidden Services
+# SOCKS proxy is handled by tor@tor2 (see Section 4)
+
+# CRITICAL: Disable SOCKS in this instance!
+# tor@tor2 provides SOCKS on port 9050
 SOCKSPort 0
 
 # === SimpleX SMP ===
@@ -500,11 +563,11 @@ HiddenServiceVersion 3
 HiddenServicePort 443 127.0.0.1:443
 ```
 
-> ⚠️ **CRITICAL:** `SOCKSPort 0` is required!
-> Running Hidden Services AND SOCKS proxy in the same Tor instance causes resource conflicts.
-> See [Appendix F](#appendix-f-dual-tor-architecture-critical-for-private-routing) for the Dual Tor Architecture.
+> **Why `SOCKSPort 0`?**
+> This disables SOCKS in `tor@default`, dedicating it exclusively to Hidden Services.
+> The SOCKS proxy for Private Routing runs on `tor@tor2` (configured in Section 4).
 
-> **Port architecture (simplified):**
+> **Port architecture:**
 > - SMP listens on **5223** only (avoids privileged port issues)
 > - XFTP listens on **443** (with capability fix in systemd)
 > - Each service has its own onion address, so no port conflicts
@@ -1210,7 +1273,7 @@ socks_mode: onion
 Running Hidden Services and SOCKS proxy in a single Tor instance causes resource conflicts.
 
 **Solution:**
-Implement Dual Tor Architecture (see [Appendix F](#appendix-f-dual-tor-architecture-critical-for-private-routing)):
+Implement Dual Tor Architecture (see [Appendix F](#appendix-f-dual-tor-architecture-reference--troubleshooting)):
 
 ```bash
 # Quick fix commands:
@@ -1376,7 +1439,7 @@ The following appendices provide advanced security configurations for high-threa
 > **Recommendations:**
 > - Start with 1-3 SMP servers for production use
 > - Monitor logs closely: `journalctl -u smp-server -f`
-> - Ensure [Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing) is properly configured
+> - Ensure [Dual Tor Architecture](#appendix-f-dual-tor-architecture-reference--troubleshooting) is properly configured
 >
 > We are actively working on improving Multi-SMP stability. Feedback welcome!
 
@@ -2661,12 +2724,10 @@ If the watchdog restarts Tor more than a few times per day, investigate:
 
 ---
 
-# Appendix F: Dual Tor Architecture (CRITICAL for Private Routing!)
+# Appendix F: Dual Tor Architecture (Reference & Troubleshooting)
 
-> **Prerequisite:** Complete Sections 1-13 (Core Setup) first.  
-> **Difficulty:** Beginner-Intermediate  
-> **Time:** 10-15 minutes  
-> **Result:** Stable Private Message Routing with separate Tor instances
+> **Note:** The Dual Tor setup is now part of the **Core Setup** (Section 4).
+> This appendix provides background information, troubleshooting, and upgrade instructions for existing installations.
 
 ---
 
@@ -2723,108 +2784,33 @@ When running SimpleX SMP servers with **Private Message Routing** enabled, you n
 
 ---
 
-## F.3 Setup Instructions
+## F.3 Verification Commands
 
-### Step 1: Verify tor@default Configuration
-
-```bash
-sudo nano /etc/tor/torrc
-```
-
-Ensure this line is present at the beginning:
-
-```torrc
-SOCKSPort 0
-```
-
-This disables SOCKS in the default instance, dedicating it to Hidden Services only.
-
-### Step 2: Create tor@tor2 Instance
+If you followed Section 4 correctly, verify your Dual Tor setup:
 
 ```bash
-# Create the second Tor instance
-sudo tor-instance-create tor2
-
-# Configure tor@tor2 for SOCKS only
-sudo nano /etc/tor/instances/tor2/torrc
-```
-
-Add:
-
-```torrc
-# SOCKS Proxy for SMP Private Routing
-Log notice syslog
-SocksPort 9050
-```
-
-### Step 3: Enable and Start tor@tor2
-
-```bash
-sudo systemctl enable tor@tor2
-sudo systemctl start tor@tor2
-```
-
-### Step 4: Update systemd Dependencies
-
-Edit your SMP server service:
-
-```bash
-sudo nano /etc/systemd/system/smp-server.service
-```
-
-Ensure the [Unit] section includes:
-
-```ini
-[Unit]
-Description=SimpleX SMP Server
-After=network.target tor@default.service tor@tor2.service
-Wants=tor@default.service tor@tor2.service
-```
-
-Reload systemd:
-
-```bash
-sudo systemctl daemon-reload
-```
-
-### Step 5: Verify SMP Configuration
-
-Ensure your SMP server config uses `socks_mode: onion` (NOT `always`!):
-
-```bash
-sudo grep -A5 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
-```
-
-Should show:
-```
-[PROXY]
-socks_proxy: 127.0.0.1:9050
-socks_mode: onion
-```
-
-If it shows `socks_mode: always`, fix it:
-
-```bash
-sudo sed -i 's/socks_mode: always/socks_mode: onion/' /etc/opt/simplex/smp-server.ini
-sudo systemctl restart smp-server
-```
-
-### Step 6: Verify Configuration
-
-```bash
-# Check both instances are running
+# 1. Both instances should be running
 sudo systemctl is-active tor@default tor@tor2
+# Expected: active / active
 
-# Verify SOCKS port is on tor@tor2
+# 2. SOCKS should be on tor@tor2, port 9050
 sudo ss -lntp | grep 9050
-# Should show: tor (tor@tor2)
+# Expected: tor (tor@tor2) listening on 127.0.0.1:9050
 
-# Test SOCKS connectivity
+# 3. tor@default should have NO SOCKS
+grep "SOCKSPort" /etc/tor/torrc
+# Expected: SOCKSPort 0
+
+# 4. tor@tor2 should have SOCKS on 9050
+grep "SocksPort" /etc/tor/instances/tor2/torrc
+# Expected: SocksPort 9050
+
+# 5. Test SOCKS connectivity
 curl -x socks5h://127.0.0.1:9050 -s https://check.torproject.org/api/ip | jq
 
-# Check SMP server config
+# 6. Check SMP server config points to tor@tor2
 sudo grep -A5 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
-# Should show:
+# Expected:
 # socks_proxy: 127.0.0.1:9050
 # socks_mode: onion
 ```
@@ -3021,23 +3007,26 @@ This project is actively developed. The following features are planned:
 ### v0.7.3-alpha (Current)
 
 **🆕 Added:**
-- **Appendix F:** Dual Tor Architecture documentation (CRITICAL for Private Routing!)
-- **Warning Banner:** Multi-SMP stability notice (10 servers = experimental)
-- **Disclaimer Section:** Legal and liability information
+- **Section 4 expanded:** Dual Tor Architecture now part of Core Setup (not optional!)
+- **Appendix F:** Reference & Troubleshooting for Dual Tor (background info, verification, upgrade path)
+- **Stability Warning:** Multi-SMP (10 servers) marked experimental (recommend 1-3 for production)
+- **Disclaimer:** Legal and liability information added
 - Architecture diagrams showing Dual Tor setup
 
 **🔧 Fixed:**
 - `socks_mode: onion` instead of `always` (major stability fix!)
 - systemd dependencies now include `tor@tor2.service`
 - All sed commands updated to properly handle socks_mode
+- **Structure fix:** Dual Tor moved from optional Appendix to required Core Setup
 
 **📝 Updated:**
-- Section 4: Reference to Dual Tor requirement
-- Section 5: SOCKSPort 0 explanation
+- Section 4: Now installs BOTH Tor instances (tor@default + tor@tor2)
+- Section 5: Clarified SOCKSPort 0 purpose (references Section 4)
 - Section 7.1: socks_mode: onion emphasis
 - Section 9: tor@tor2 systemd dependencies
 - Section 11: Verification for both Tor instances
 - Appendix A: Experimental warning, 1-3 server recommendation, updated architecture diagram
+- Appendix F: Changed from "Setup Guide" to "Reference & Troubleshooting"
 - Troubleshooting: SocksErrorGeneralServerFailure fix
 - Quick Reference: Commands for both Tor instances
 - Roadmap: Updated status for Dual Tor and socks_mode fix
@@ -3110,7 +3099,9 @@ This project is actively developed. The following features are planned:
 ## License
 
 This guide is released under **AGPL-3.0**.
+
 SimpleX software is licensed under **AGPL-3.0**.
+
 Pre-built binaries are unmodified builds from [simplex-chat/simplexmq](https://github.com/simplex-chat/simplexmq).
 
 ---
