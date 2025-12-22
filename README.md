@@ -15,9 +15,31 @@
 
 A battle-tested, reproducible guide to deploy your own **closed-system, high-security SimpleX messaging infrastructure** on a Raspberry Pi using Tor v3 hidden services.
 
-> **Version:** 0.7.2-alpha (21. December 2025)  
+> **Version:** 0.7.3-alpha (22. December 2025)  
 > **Tested on:** Raspberry Pi 4 (4GB), Raspberry Pi OS Lite 64-bit (Bookworm)  
 > **SimpleX Version:** 6.4.5.1
+
+---
+
+> ⚠️ **STABILITY WARNING - Multi-SMP Configuration**
+>
+> Running 10 SMP servers (Appendix A) is currently **experimental** and may experience stability issues.
+> **Recommendation:** Start with 1-3 SMP servers for production use.
+> We are actively working on improving Multi-SMP stability.
+>
+> ➡️ **CRITICAL:** See [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing) - Required for Private Message Routing!
+
+---
+
+> ⚠️ **IMPORTANT: Tor Connectivity Fluctuations**
+>
+> You may experience temporary connectivity issues with your Tor hidden services. This is normal behavior due to:
+> - Tor circuit rebuilding (circuits rotate every ~10 minutes)
+> - Network congestion on the Tor network
+> - Guard node changes
+>
+> The [Tor Watchdog](#appendix-e-tor-watchdog) automatically handles recovery.
+> For persistent issues, see [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing).
 
 ---
 
@@ -227,12 +249,12 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │   ┌─────────────────────────────────────────────────────────┐   │
-│   │              TOR DAEMON + WATCHDOG                      │   │
-│   │         (12 Hidden Services)                            │   │
+│   │              DUAL TOR ARCHITECTURE                      │   │
+│   │         (12 Hidden Services + SOCKS Proxy)              │   │
 │   │                                                         │   │
-│   │   All services Tor-only, zero clearnet                  │   │
-│   │   v3 onion addresses (ed25519 crypto)                   │   │
-│   │   Auto-recovery on connectivity issues                  │   │
+│   │   tor@default: Hidden Services only (SOCKSPort 0)       │   │
+│   │   tor@tor2: SOCKS Proxy only (SocksPort 9050)           │   │
+│   │   Auto-recovery via Tor Watchdog                        │   │
 │   └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -266,6 +288,7 @@ This guide uses a Raspberry Pi as a **low-budget, high-security** reference plat
 | **Infrastructure** | Self-hosted, YOU are the only operator |
 | **Network** | Firewall blocks all clearnet access to services |
 | **Availability** | Tor Watchdog auto-recovers from connectivity issues |
+| **Isolation** | Dual Tor Architecture separates Hidden Services from SOCKS |
 
 ### The Discovery Problem (Why Closed Systems Matter)
 
@@ -333,7 +356,7 @@ All 10 SMP servers run on **one device** under **one operator** (you). This mean
 | Threat Level | Recommended Setup | Example Users |
 |--------------|-------------------|---------------|
 | **Standard** | Closed Mode, single Pi | Families, small teams |
-| **Elevated** | Closed Mode + Appendix B-E | NGOs, journalists |
+| **Elevated** | Closed Mode + Appendix B-F | NGOs, journalists |
 | **High** | Multi-location + different operators | Activists in hostile states |
 | **Extreme** | Air-gapped + multi-jurisdiction + burner devices | Conflict zones, whistleblowers |
 
@@ -361,7 +384,8 @@ All 10 SMP servers run on **one device** under **one operator** (you). This mean
 - [Appendix B: SSH over Tor](#appendix-b-ssh-over-tor)
 - [Appendix C: Tor v3 Client Authorization](#appendix-c-tor-v3-client-authorization) *(coming soon)*
 - [Appendix D: Vanguards](#appendix-d-vanguards) *(coming soon)*
-- [Appendix E: Tor Watchdog](#appendix-e-tor-watchdog) ⭐ **NEW - Recommended!**
+- [Appendix E: Tor Watchdog](#appendix-e-tor-watchdog) ⭐ **Recommended!**
+- [Appendix F: Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing) ⭐ **NEW - CRITICAL for Private Routing!**
 
 ### Roadmap
 - [Future Development](#roadmap-future-development)
@@ -446,6 +470,10 @@ sudo apt install -y tor deb.torproject.org-keyring
 sudo systemctl enable --now tor@default
 ```
 
+> 💡 **Note:** This installs the default Tor instance (`tor@default`).
+> For Private Message Routing, you'll also need a second Tor instance (`tor@tor2`) for SOCKS proxy.
+> See [Appendix F](#appendix-f-dual-tor-architecture-critical-for-private-routing) for the complete Dual Tor setup.
+
 ---
 
 ## 5. Configure Tor hidden services
@@ -457,6 +485,10 @@ sudo nano /etc/tor/torrc
 Add at the end:
 
 ```bash
+# Disable SOCKS in this instance - we use tor@tor2 for SOCKS proxy
+# This prevents resource conflicts between Hidden Services and SOCKS
+SOCKSPort 0
+
 # === SimpleX SMP ===
 HiddenServiceDir /var/lib/tor/simplex-smp/
 HiddenServiceVersion 3
@@ -467,6 +499,10 @@ HiddenServiceDir /var/lib/tor/simplex-xftp/
 HiddenServiceVersion 3
 HiddenServicePort 443 127.0.0.1:443
 ```
+
+> ⚠️ **CRITICAL:** `SOCKSPort 0` is required!
+> Running Hidden Services AND SOCKS proxy in the same Tor instance causes resource conflicts.
+> See [Appendix F](#appendix-f-dual-tor-architecture-critical-for-private-routing) for the Dual Tor Architecture.
 
 > **Port architecture (simplified):**
 > - SMP listens on **5223** only (avoids privileged port issues)
@@ -513,9 +549,9 @@ Download verified ARM64 binaries from our GitHub releases:
 
 ```bash
 # Download binaries
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/smp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/xftp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.3-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.3-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.3-alpha/SHA256SUMS
 
 # Verify checksums (IMPORTANT!)
 sha256sum -c SHA256SUMS
@@ -651,13 +687,20 @@ Find the `[PROXY]` section and configure:
 [PROXY]
 # SOCKS proxy for forwarding messages to destination servers
 # MUST use IP address, not "localhost"!
+# Points to tor@tor2 (NOT tor@default!)
 socks_proxy: 127.0.0.1:9050
 
 # For Tor-only .onion servers, use 'onion' mode
-# 'onion' = SOCKS only for .onion destinations (default)
-# 'always' = SOCKS for all destinations
+# 'onion' = SOCKS only for .onion destinations (RECOMMENDED!)
+# 'always' = SOCKS for all destinations (NOT recommended - causes instability!)
 socks_mode: onion
 ```
+
+> ⚠️ **CRITICAL Configuration:**
+> - `socks_proxy: 127.0.0.1:9050` → Points to tor@tor2 (NOT tor@default!)
+> - `socks_mode: onion` → Use SOCKS **only** for .onion addresses
+>
+> **DO NOT use `socks_mode: always`!** This forces ALL traffic through SOCKS, causing instability when Tor circuits rebuild.
 
 **Disable HTTPS web server** (find `[WEB]` section):
 
@@ -683,6 +726,7 @@ sudo sed -i 's/^key:/# key:/' /etc/opt/simplex/smp-server.ini
 # CRITICAL: Configure SOCKS proxy in [PROXY] section for Private Routing
 # First, remove any existing socks_proxy entries (might be in wrong section)
 sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex/smp-server.ini
+sudo sed -i '/^socks_mode:/d' /etc/opt/simplex/smp-server.ini
 
 # Add socks_proxy and socks_mode in [PROXY] section
 sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex/smp-server.ini
@@ -769,8 +813,8 @@ drwxr-x--- simplex simplex files
 sudo tee /etc/systemd/system/smp-server.service > /dev/null <<'EOF'
 [Unit]
 Description=SimpleX SMP Server
-After=network.target tor@default.service
-Requires=tor@default.service
+After=network.target tor@default.service tor@tor2.service
+Wants=tor@default.service tor@tor2.service
 
 [Service]
 Type=simple
@@ -792,6 +836,12 @@ WantedBy=multi-user.target
 EOF
 ```
 
+> 💡 **Note the dependencies:**
+> - `tor@default.service` → Provides Hidden Services
+> - `tor@tor2.service` → Provides SOCKS proxy for Private Routing
+>
+> Both are required for full functionality!
+
 ### 9.2 XFTP service (with CAP_NET_BIND_SERVICE for port 443)
 
 > **CRITICAL:** XFTP binds to port 443, which requires special capability for non-root users.
@@ -800,8 +850,8 @@ EOF
 sudo tee /etc/systemd/system/xftp-server.service > /dev/null <<'EOF'
 [Unit]
 Description=SimpleX XFTP Server
-After=network.target tor@default.service
-Requires=tor@default.service
+After=network.target tor@default.service tor@tor2.service
+Wants=tor@default.service tor@tor2.service
 
 [Service]
 Type=simple
@@ -893,7 +943,21 @@ sudo systemctl is-active tor@default smp-server xftp-server
 
 All should return `active`.
 
-### 11.2 Ports listening
+### 11.2 Verify Both Tor Instances
+
+```bash
+# Check both Tor instances are running
+sudo systemctl is-active tor@default tor@tor2
+
+# Verify SOCKS port is handled by tor@tor2
+sudo ss -lntp | grep 9050
+# Expected: tor@tor2 listening on 127.0.0.1:9050
+
+# Test SOCKS proxy functionality
+curl -x socks5h://127.0.0.1:9050 -s https://check.torproject.org/api/ip | jq
+```
+
+### 11.3 Ports listening
 
 ```bash
 sudo ss -lntp | grep -E ':(443|5223)'
@@ -905,7 +969,7 @@ LISTEN  *:5223   users:(("smp-server",...))
 LISTEN  *:443    users:(("xftp-server",...))
 ```
 
-### 11.3 Test via Tor
+### 11.4 Test via Tor
 
 ```bash
 SMP_ONION=$(sudo cat /var/lib/tor/simplex-smp/hostname)
@@ -915,7 +979,7 @@ torsocks nc -zv "$SMP_ONION" 5223 && echo "✓ SMP OK"
 torsocks nc -zv "$XFTP_ONION" 443 && echo "✓ XFTP OK"
 ```
 
-### 11.4 Get server addresses
+### 11.5 Get server addresses
 
 ```bash
 echo "=== SERVER ADDRESSES ==="
@@ -1009,9 +1073,9 @@ sudo apt install binutils-gold
 ```bash
 # Re-download
 rm smp-server xftp-server SHA256SUMS
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/smp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/xftp-server
-wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.2-alpha/SHA256SUMS
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.3-alpha/smp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.3-alpha/xftp-server
+wget https://github.com/cannatoshi/simplex-smp-xftp-via-tor-on-rpi-hardened/releases/download/v0.7.3-alpha/SHA256SUMS
 
 # Verify again
 sha256sum -c SHA256SUMS
@@ -1112,6 +1176,7 @@ Error connecting: xxx.onion PCENetworkError (NEConnectError {connectError = "...
 ```bash
 # Remove any existing socks_proxy entries (might be in wrong section)
 sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex/smp-server.ini
+sudo sed -i '/^socks_mode:/d' /etc/opt/simplex/smp-server.ini
 
 # Add correct configuration in [PROXY] section
 sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex/smp-server.ini
@@ -1130,6 +1195,45 @@ Should show:
 [PROXY]
 socks_proxy: 127.0.0.1:9050
 socks_mode: onion
+```
+
+---
+
+### SocksErrorGeneralServerFailure
+
+**Symptoms:**
+- Private Message Routing fails
+- Log shows: `SocksErrorGeneralServerFailure`
+- Intermittent connectivity issues
+
+**Root Cause:**
+Running Hidden Services and SOCKS proxy in a single Tor instance causes resource conflicts.
+
+**Solution:**
+Implement Dual Tor Architecture (see [Appendix F](#appendix-f-dual-tor-architecture-critical-for-private-routing)):
+
+```bash
+# Quick fix commands:
+
+# 1. Ensure tor@default has SOCKSPort 0
+grep -q "SOCKSPort 0" /etc/tor/torrc || echo "SOCKSPort 0" | sudo tee -a /etc/tor/torrc
+
+# 2. Create tor@tor2 if not exists
+sudo tor-instance-create tor2 2>/dev/null || true
+echo -e "Log notice syslog\nSocksPort 9050" | sudo tee /etc/tor/instances/tor2/torrc
+
+# 3. Enable and start tor@tor2
+sudo systemctl enable --now tor@tor2
+
+# 4. Fix socks_mode (use 'onion', NOT 'always'!)
+sudo sed -i 's/socks_mode: always/socks_mode: onion/' /etc/opt/simplex/smp-server.ini
+
+# 5. Restart services
+sudo systemctl restart tor@default smp-server
+
+# 6. Verify
+sudo systemctl is-active tor@default tor@tor2
+sudo ss -lntp | grep 9050
 ```
 
 ---
@@ -1214,24 +1318,34 @@ If specific servers consistently fail, check their configs individually.
 
 ```bash
 # Restart everything
-sudo systemctl restart tor@default smp-server xftp-server
+sudo systemctl restart tor@default tor@tor2 smp-server xftp-server
 
 # View logs
 sudo journalctl -u smp-server -f
 sudo journalctl -u xftp-server -f
 sudo journalctl -u tor@default -f
+sudo journalctl -u tor@tor2 -f
 
 # Check ports
-sudo ss -lntp | grep -E ':(443|5223)'
+sudo ss -lntp | grep -E ':(443|5223|9050)'
 
 # Check SOCKS proxy config (should be in [PROXY] section!)
 sudo grep -A3 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
+
+# Check both Tor instances
+sudo systemctl is-active tor@default tor@tor2
+
+# Verify SOCKS is on tor@tor2
+sudo ss -lntp | grep 9050
 
 # Check Tor status
 sudo journalctl -u tor@default --since "5 min ago" | grep -iE "bootstrap|circuit|guard"
 
 # Test Hidden Service connectivity
 torsocks nc -zv $(sudo cat /var/lib/tor/simplex-smp/hostname) 5223
+
+# Test SOCKS proxy
+curl -x socks5h://127.0.0.1:9050 -s https://check.torproject.org/api/ip | jq
 
 # Export addresses (KEEP THESE SECRET!)
 echo "SMP:  $(sudo cat /var/lib/tor/simplex-smp/hostname)"
@@ -1252,6 +1366,19 @@ The following appendices provide advanced security configurations for high-threa
 > **Difficulty:** Intermediate  
 > **Time:** 30-45 minutes  
 > **Result:** 10 SMP servers on a single Raspberry Pi with full Private Routing support
+
+---
+
+> ⚠️ **EXPERIMENTAL FEATURE**
+>
+> Running 10 SMP servers is currently experimental and may experience stability issues.
+>
+> **Recommendations:**
+> - Start with 1-3 SMP servers for production use
+> - Monitor logs closely: `journalctl -u smp-server -f`
+> - Ensure [Dual Tor Architecture](#appendix-f-dual-tor-architecture-critical-for-private-routing) is properly configured
+>
+> We are actively working on improving Multi-SMP stability. Feedback welcome!
 
 ---
 
@@ -1309,29 +1436,38 @@ With 10 servers, even within your closed group:
 ## A.3 Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    RASPBERRY PI 4                           │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
-│  │ SMP #1  │ │ SMP #2  │ │ SMP #3  │ │ SMP #4  │           │
-│  │ :5223   │ │ :5224   │ │ :5225   │ │ :5226   │           │
-│  │ onion1  │ │ onion2  │ │ onion3  │ │ onion4  │           │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
-│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
-│  │ SMP #5  │ │ SMP #6  │ │ SMP #7  │ │ SMP #8  │           │
-│  │ :5227   │ │ :5228   │ │ :5229   │ │ :5230   │           │
-│  │ onion5  │ │ onion6  │ │ onion7  │ │ onion8  │           │
-│  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
-│  ┌─────────┐ ┌─────────┐ ┌─────────────────────┐           │
-│  │ SMP #9  │ │ SMP #10 │ │      XFTP #1        │           │
-│  │ :5231   │ │ :5232   │ │       :443          │           │
-│  │ onion9  │ │ onion10 │ │      onionX         │           │
-│  └─────────┘ └─────────┘ └─────────────────────┘           │
-├─────────────────────────────────────────────────────────────┤
-│                        TOR DAEMON                           │
-│            11 Hidden Services → 11 .onion addresses         │
-│            (All addresses known ONLY to your group)         │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    DUAL TOR ARCHITECTURE                        │
+│                                                                 │
+│  tor@default              tor@tor2                              │
+│  (Hidden Services)        (SOCKS Proxy)                         │
+│  SOCKSPort 0              SocksPort 9050                        │
+│       │                        │                                │
+│       ▼                        ▼                                │
+│   INBOUND                  OUTBOUND                             │
+│   (.onion addresses)       (Private Routing)                    │
+└───────┬────────────────────────┬────────────────────────────────┘
+        │                        │
+        ▼                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    RASPBERRY PI 4                               │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐               │
+│  │ SMP #1  │ │ SMP #2  │ │ SMP #3  │ │ SMP #4  │               │
+│  │ :5223   │ │ :5224   │ │ :5225   │ │ :5226   │               │
+│  │ onion1  │ │ onion2  │ │ onion3  │ │ onion4  │               │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘               │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐               │
+│  │ SMP #5  │ │ SMP #6  │ │ SMP #7  │ │ SMP #8  │               │
+│  │ :5227   │ │ :5228   │ │ :5229   │ │ :5230   │               │
+│  │ onion5  │ │ onion6  │ │ onion7  │ │ onion8  │               │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘               │
+│  ┌─────────┐ ┌─────────┐ ┌─────────────────────┐               │
+│  │ SMP #9  │ │ SMP #10 │ │      XFTP #1        │               │
+│  │ :5231   │ │ :5232   │ │       :443          │               │
+│  │ onion9  │ │ onion10 │ │      onionX         │               │
+│  └─────────┘ └─────────┘ └─────────────────────┘               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **Port Mapping:**
@@ -1474,6 +1610,8 @@ sudo mv /var/opt/simplex-backup /var/opt/simplex 2>/dev/null || true
 ## A.7 Configure Ports and SOCKS Proxy (CRITICAL!)
 
 > **⚠️ CRITICAL:** The SOCKS proxy configuration **MUST** be in the `[PROXY]` section for Private Message Routing to work! Placing it in `[TRANSPORT]` will NOT work.
+>
+> **Also CRITICAL:** Use `socks_mode: onion`, **NOT** `socks_mode: always`! Using `always` causes instability when Tor circuits rebuild.
 
 ```bash
 # Configure all instances
@@ -1487,15 +1625,18 @@ for i in 2 3 4 5 6 7 8 9 10; do
   # Disable HTTPS
   sudo sed -i 's/^https:.*/# &/' /etc/opt/simplex-smp$i/smp-server.ini
   
-  # CRITICAL: Remove any existing socks_proxy entries (might be in wrong section)
+  # CRITICAL: Remove any existing socks_proxy/socks_mode entries (might be in wrong section)
   sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex-smp$i/smp-server.ini
+  sudo sed -i '/^socks_mode:/d' /etc/opt/simplex-smp$i/smp-server.ini
   
   # CRITICAL: Add SOCKS proxy in [PROXY] section (NOT [TRANSPORT]!)
+  # Use socks_mode: onion (NOT always!)
   sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex-smp$i/smp-server.ini
 done
 
 # Also fix the original server if not already done
 sudo sed -i '/^socks_proxy:/d' /etc/opt/simplex/smp-server.ini
+sudo sed -i '/^socks_mode:/d' /etc/opt/simplex/smp-server.ini
 sudo sed -i '/^\[PROXY\]$/a socks_proxy: 127.0.0.1:9050\nsocks_mode: onion' /etc/opt/simplex/smp-server.ini
 ```
 
@@ -1527,8 +1668,8 @@ socks_mode: onion
 sudo tee /etc/systemd/system/smp-server@.service > /dev/null <<'EOF'
 [Unit]
 Description=SimpleX SMP Server (Instance %i)
-After=network.target tor@default.service
-Requires=tor@default.service
+After=network.target tor@default.service tor@tor2.service
+Wants=tor@default.service tor@tor2.service
 
 [Service]
 Type=simple
@@ -2184,6 +2325,9 @@ torsocks nc -zv your-ssh-onion.onion 22
 After completing Appendices A and B, your `/etc/tor/torrc` should contain:
 
 ```bash
+# Disable SOCKS in this instance - we use tor@tor2 for SOCKS proxy
+SOCKSPort 0
+
 # === SSH Administration ===
 HiddenServiceDir /var/lib/tor/ssh/
 HiddenServiceVersion 3
@@ -2517,24 +2661,295 @@ If the watchdog restarts Tor more than a few times per day, investigate:
 
 ---
 
+# Appendix F: Dual Tor Architecture (CRITICAL for Private Routing!)
+
+> **Prerequisite:** Complete Sections 1-13 (Core Setup) first.  
+> **Difficulty:** Beginner-Intermediate  
+> **Time:** 10-15 minutes  
+> **Result:** Stable Private Message Routing with separate Tor instances
+
+---
+
+## F.1 Why Two Tor Instances?
+
+When running SimpleX SMP servers with **Private Message Routing** enabled, you need:
+
+1. **Inbound connections** via Tor Hidden Services (clients connect to your .onion)
+2. **Outbound connections** via SOCKS proxy (for forwarding messages to other servers)
+
+**The Problem:** Running both Hidden Services AND a SOCKS proxy in a single Tor instance causes resource conflicts:
+- Tor circuits compete for resources
+- SOCKS requests interfere with Hidden Service circuits
+- Result: `SocksErrorGeneralServerFailure` errors and unstable routing
+
+**The Solution:** Two separate Tor instances with dedicated responsibilities:
+
+| Instance | Purpose | Configuration |
+|----------|---------|---------------|
+| `tor@default` | Hidden Services ONLY | `SOCKSPort 0` |
+| `tor@tor2` | SOCKS Proxy ONLY | `SocksPort 9050` |
+
+---
+
+## F.2 Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DUAL TOR ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────────┐       ┌─────────────────────┐         │
+│  │    tor@default      │       │      tor@tor2       │         │
+│  │  (Hidden Services)  │       │   (SOCKS Proxy)     │         │
+│  │                     │       │                     │         │
+│  │  SOCKSPort 0        │       │  SocksPort 9050     │         │
+│  │  HiddenService ×N   │       │  No HiddenServices  │         │
+│  │                     │       │                     │         │
+│  └──────────┬──────────┘       └──────────┬──────────┘         │
+│             │                             │                     │
+│             │ INBOUND                     │ OUTBOUND            │
+│             │ (clients → .onion)          │ (→ other servers)   │
+│             ▼                             ▼                     │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                      SMP SERVER                             ││
+│  │                                                             ││
+│  │   socks_proxy: 127.0.0.1:9050  ←── Points to tor@tor2      ││
+│  │   socks_mode: onion            ←── Only .onion via SOCKS   ││
+│  │                                                             ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## F.3 Setup Instructions
+
+### Step 1: Verify tor@default Configuration
+
+```bash
+sudo nano /etc/tor/torrc
+```
+
+Ensure this line is present at the beginning:
+
+```torrc
+SOCKSPort 0
+```
+
+This disables SOCKS in the default instance, dedicating it to Hidden Services only.
+
+### Step 2: Create tor@tor2 Instance
+
+```bash
+# Create the second Tor instance
+sudo tor-instance-create tor2
+
+# Configure tor@tor2 for SOCKS only
+sudo nano /etc/tor/instances/tor2/torrc
+```
+
+Add:
+
+```torrc
+# SOCKS Proxy for SMP Private Routing
+Log notice syslog
+SocksPort 9050
+```
+
+### Step 3: Enable and Start tor@tor2
+
+```bash
+sudo systemctl enable tor@tor2
+sudo systemctl start tor@tor2
+```
+
+### Step 4: Update systemd Dependencies
+
+Edit your SMP server service:
+
+```bash
+sudo nano /etc/systemd/system/smp-server.service
+```
+
+Ensure the [Unit] section includes:
+
+```ini
+[Unit]
+Description=SimpleX SMP Server
+After=network.target tor@default.service tor@tor2.service
+Wants=tor@default.service tor@tor2.service
+```
+
+Reload systemd:
+
+```bash
+sudo systemctl daemon-reload
+```
+
+### Step 5: Verify SMP Configuration
+
+Ensure your SMP server config uses `socks_mode: onion` (NOT `always`!):
+
+```bash
+sudo grep -A5 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
+```
+
+Should show:
+```
+[PROXY]
+socks_proxy: 127.0.0.1:9050
+socks_mode: onion
+```
+
+If it shows `socks_mode: always`, fix it:
+
+```bash
+sudo sed -i 's/socks_mode: always/socks_mode: onion/' /etc/opt/simplex/smp-server.ini
+sudo systemctl restart smp-server
+```
+
+### Step 6: Verify Configuration
+
+```bash
+# Check both instances are running
+sudo systemctl is-active tor@default tor@tor2
+
+# Verify SOCKS port is on tor@tor2
+sudo ss -lntp | grep 9050
+# Should show: tor (tor@tor2)
+
+# Test SOCKS connectivity
+curl -x socks5h://127.0.0.1:9050 -s https://check.torproject.org/api/ip | jq
+
+# Check SMP server config
+sudo grep -A5 "\[PROXY\]" /etc/opt/simplex/smp-server.ini
+# Should show:
+# socks_proxy: 127.0.0.1:9050
+# socks_mode: onion
+```
+
+---
+
+## F.4 Troubleshooting
+
+### Problem: "SocksErrorGeneralServerFailure"
+
+**Cause:** SOCKS proxy not available or misconfigured.
+
+**Solution:**
+1. Verify tor@tor2 is running: `sudo systemctl status tor@tor2`
+2. Check port 9050: `sudo ss -lntp | grep 9050`
+3. Ensure `socks_mode: onion` (NOT `always`) in smp-server.ini
+
+### Problem: Private Routing Disconnects
+
+**Cause:** Likely running SOCKS in tor@default.
+
+**Solution:**
+1. Add `SOCKSPort 0` to `/etc/tor/torrc`
+2. Restart tor@default: `sudo systemctl restart tor@default`
+3. Verify tor@tor2 handles SOCKS: `sudo ss -lntp | grep 9050`
+
+### Problem: tor@tor2 Won't Start
+
+**Cause:** Port conflict or missing directory.
+
+**Solution:**
+```bash
+# Check for port conflict
+sudo ss -lntp | grep 9050
+
+# Verify instance exists
+ls -la /etc/tor/instances/tor2/
+
+# Check logs
+sudo journalctl -u tor@tor2 -n 50
+```
+
+---
+
+## F.5 Quick Reference
+
+```bash
+# Check both Tor instances
+sudo systemctl is-active tor@default tor@tor2
+
+# Restart both
+sudo systemctl restart tor@default tor@tor2
+
+# View tor@tor2 logs
+sudo journalctl -u tor@tor2 -f
+
+# Test SOCKS proxy
+curl -x socks5h://127.0.0.1:9050 -s https://check.torproject.org/api/ip
+
+# Verify SOCKS is handled by tor@tor2
+sudo ss -lntp | grep 9050
+
+# Quick fix for SocksError
+grep -q "SOCKSPort 0" /etc/tor/torrc || echo "SOCKSPort 0" | sudo tee -a /etc/tor/torrc
+sudo systemctl restart tor@default
+```
+
+---
+
+## F.6 Upgrade Instructions (Existing Installations)
+
+If you're upgrading from v0.7.2 or earlier:
+
+```bash
+# 1. Add SOCKSPort 0 to tor@default
+grep -q "SOCKSPort 0" /etc/tor/torrc || echo "SOCKSPort 0" | sudo tee -a /etc/tor/torrc
+
+# 2. Create and configure tor@tor2
+sudo tor-instance-create tor2
+echo -e "Log notice syslog\nSocksPort 9050" | sudo tee /etc/tor/instances/tor2/torrc
+sudo systemctl enable --now tor@tor2
+
+# 3. Fix socks_mode in all SMP configs (use 'onion', NOT 'always'!)
+sudo sed -i 's/socks_mode: always/socks_mode: onion/' /etc/opt/simplex/smp-server.ini
+
+# For Multi-SMP setups:
+for i in 2 3 4 5 6 7 8 9 10; do
+  sudo sed -i 's/socks_mode: always/socks_mode: onion/' /etc/opt/simplex-smp$i/smp-server.ini 2>/dev/null || true
+done
+
+# 4. Update systemd dependencies (add to [Unit] section)
+# Wants=tor@tor2.service
+# After=tor@tor2.service
+sudo systemctl daemon-reload
+
+# 5. Restart everything
+sudo systemctl restart tor@default smp-server
+
+# 6. Verify
+sudo systemctl is-active tor@default tor@tor2
+sudo ss -lntp | grep 9050
+```
+
+---
+
 # Roadmap: Future Development
 
 This project is actively developed. The following features are planned:
 
 ## Security Hardening
 
-| Feature | Status | Description |
-|---------|--------|-------------|
-| **Multi-SMP Private Routing** | ✅ v0.6 | 10 SMP servers for traffic mixing |
-| **SSH over Tor** | ✅ v0.7 | Admin access only via .onion |
-| **Pre-built ARM64 Binaries** | ✅ v0.7 | Skip 60min compile time |
-| **Closed User Group Docs** | ✅ v0.7 | Documentation for isolated infrastructure |
-| **SOCKS Proxy Fix** | ✅ v0.7.1 | Correct [PROXY] section configuration |
-| **Tor Watchdog** | ✅ v0.7.2 | Auto-recovery from connectivity issues |
-| **Tor v3 Client Authorization** | 🔜 v0.8 | Hidden services invisible without keys |
-| **Vanguards** | 🔜 v0.9 | Guard discovery protection |
-| **LUKS Full-Disk Encryption** | 📋 Planned | Protect data at rest |
-| **Dead Man's Switch** | 📋 Planned | Auto-wipe on tampering |
+| Feature | Status | Version | Notes |
+|---------|--------|---------|-------|
+| **Multi-SMP Private Routing** | ⚠️ | v0.6+ | Experimental with 10 servers; stable with 1-3 |
+| **SSH over Tor** | ✅ | v0.7 | Admin access only via .onion |
+| **Pre-built ARM64 Binaries** | ✅ | v0.7 | Skip 60min compile time |
+| **Closed User Group Docs** | ✅ | v0.7 | Documentation for isolated infrastructure |
+| **SOCKS Proxy Fix** | ✅ | v0.7.1 | Correct [PROXY] section configuration |
+| **Tor Watchdog** | ✅ | v0.7.2 | Auto-recovery from connectivity issues |
+| **Dual Tor Architecture** | ✅ | v0.7.3 | Separate instances for HS and SOCKS |
+| **socks_mode: onion Fix** | ✅ | v0.7.3 | Use 'onion' not 'always' for stability |
+| **Tor v3 Client Authorization** | 🔜 | v0.8 | Hidden services invisible without keys |
+| **Vanguards** | 🔜 | v0.9 | Guard discovery protection |
+| **LUKS Full-Disk Encryption** | 📋 | Planned | Protect data at rest |
+| **Dead Man's Switch** | 📋 | Planned | Auto-wipe on tampering |
 
 ## Anti-Abuse & Performance
 
@@ -2575,9 +2990,60 @@ This project is actively developed. The following features are planned:
 
 ---
 
+## ⚠️ Disclaimer
+
+### IMPORTANT: READ BEFORE USING THIS SOFTWARE
+
+**No Warranty:** This software is provided "AS IS" without warranty of any kind, express or implied. The authors make no representations about the suitability of this software for any particular purpose.
+
+**No Guarantee of Security:** While this guide aims to enhance privacy through Tor integration, no system is 100% secure. The authors do not guarantee that this configuration will protect against all threats, attacks, or surveillance methods.
+
+**Experimental Features:** Features marked as "experimental" (such as Multi-SMP with 10 servers) may be unstable and are not recommended for production use without thorough testing.
+
+**Legal Compliance:** Users are responsible for ensuring their use of this software complies with all applicable local, state, national, and international laws and regulations.
+
+**Limitation of Liability:** In no event shall the authors be liable for any direct, indirect, incidental, special, exemplary, or consequential damages arising from the use of this software.
+
+**Your Responsibility:** By using this software, you accept full responsibility for:
+- Proper configuration and maintenance
+- Security of your systems and data
+- Compliance with applicable laws
+- Any consequences of system failures or security breaches
+
+**No Legal Advice:** This documentation does not constitute legal advice. Consult with a qualified legal professional regarding the legality of operating anonymous infrastructure in your jurisdiction.
+
+**Third-Party Software:** This guide integrates with third-party software (Tor, SimpleX) which have their own licenses, terms of service, and security considerations. The authors are not responsible for issues arising from third-party components.
+
+---
+
 ## Changelog
 
-### v0.7.2-alpha (Current)
+### v0.7.3-alpha (Current)
+
+**🆕 Added:**
+- **Appendix F:** Dual Tor Architecture documentation (CRITICAL for Private Routing!)
+- **Warning Banner:** Multi-SMP stability notice (10 servers = experimental)
+- **Disclaimer Section:** Legal and liability information
+- Architecture diagrams showing Dual Tor setup
+
+**🔧 Fixed:**
+- `socks_mode: onion` instead of `always` (major stability fix!)
+- systemd dependencies now include `tor@tor2.service`
+- All sed commands updated to properly handle socks_mode
+
+**📝 Updated:**
+- Section 4: Reference to Dual Tor requirement
+- Section 5: SOCKSPort 0 explanation
+- Section 7.1: socks_mode: onion emphasis
+- Section 9: tor@tor2 systemd dependencies
+- Section 11: Verification for both Tor instances
+- Appendix A: Experimental warning, 1-3 server recommendation, updated architecture diagram
+- Troubleshooting: SocksErrorGeneralServerFailure fix
+- Quick Reference: Commands for both Tor instances
+- Roadmap: Updated status for Dual Tor and socks_mode fix
+- Security Model: Added Isolation layer
+
+### v0.7.2-alpha
 - **ADDED:** Appendix E - Tor Watchdog (automatic recovery from connectivity issues)
 - **ADDED:** Known Issue banner about Tor connectivity fluctuations
 - **ADDED:** Troubleshooting section for Tor connectivity issues (guard nodes, circuit timeouts)
@@ -2644,9 +3110,7 @@ This project is actively developed. The following features are planned:
 ## License
 
 This guide is released under **AGPL-3.0**.
-
 SimpleX software is licensed under **AGPL-3.0**.
-
 Pre-built binaries are unmodified builds from [simplex-chat/simplexmq](https://github.com/simplex-chat/simplexmq).
 
 ---
@@ -2664,3 +3128,5 @@ Found a bug? Have an improvement?
 *Built with 🔐 by [cannatoshi](https://github.com/cannatoshi)*
 
 *"The best hiding place is one nobody knows exists."*
+
+*"Two Tors are better than one."* 🧅🧅
